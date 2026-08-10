@@ -264,6 +264,14 @@
     border-radius:7px; padding:8px 10px; font-size:13px; font-weight:600; max-width:160px;
   }
 
+  .history-card{ display:flex; flex-direction:column; gap:6px; }
+  .history-top{ display:flex; justify-content:space-between; align-items:baseline; gap:10px; }
+  .history-teams{ font-weight:700; font-size:14.5px; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .history-date{ font-size:11px; color:var(--ink-soft); flex-shrink:0; }
+  .history-score{ font-family:var(--font-mono); font-variant-numeric:tabular-nums; font-size:13.5px; color:var(--ink-soft); }
+  .history-result{ font-size:13px; font-weight:600; color:var(--turf-strong); }
+  .history-mom{ font-size:12px; color:var(--bail); }
+
   footer{ padding:16px 18px 26px; text-align:center; color:var(--ink-soft); font-size:11.5px; line-height:1.6; }
 
   .print-only{ display:none; }
@@ -313,7 +321,9 @@ function freshState(){
     inningsIndex: 0,
     innings: [null, null],
     formError: "",
-    manOfMatch: null
+    manOfMatch: null,
+    matchId: null,
+    matchDate: null
   };
 }
 function emptyBatsman(){ return { name:null, runs:0, balls:0, out:false, ones:0, twos:0, threes:0, fours:0, sixes:0 }; }
@@ -365,7 +375,18 @@ function undo(){
 function esc(s){
   return String(s==null?"":s).replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 }
-function teamName(key){ return key==="A" ? (state.teamAName||"Team A") : (state.teamBName||"Team B"); }
+function teamName(key, s){ s = s || state; return key==="A" ? (s.teamAName||"Team A") : (s.teamBName||"Team B"); }
+function matchResult(s){
+  const i1 = s.innings[0], i2 = s.innings[1];
+  if(i2.runs > i1.runs){
+    const ballsLeft = s.oversLimit*6 - i2.legalBalls;
+    return { text: `${teamName(i2.battingKey,s)} won, chasing it down` + (ballsLeft>0 ? ` with ${oversText(ballsLeft)} overs unused` : ""), tied:false };
+  }
+  if(i2.runs < i1.runs){
+    return { text: `${teamName(i1.battingKey,s)} won by ${i1.runs - i2.runs} run${(i1.runs-i2.runs)===1?"":"s"}`, tied:false };
+  }
+  return { text:"Match tied", tied:true };
+}
 function otherKey(key){ return key==="A" ? "B" : "A"; }
 function oversText(legalBalls){ return Math.floor(legalBalls/6) + "." + (legalBalls%6); }
 function currentInning(){ return state.innings[state.inningsIndex]; }
@@ -393,6 +414,7 @@ function finishAction(){
   const inning = currentInning();
   if(inning.ended){
     state.screen = state.inningsIndex===0 ? "break" : "result";
+    if(state.screen==="result") archiveMatch();
   }
   save(); render();
 }
@@ -407,6 +429,8 @@ function startSetup(){
   if(!a || !b){ state.formError="Enter both team names."; save(); render(); return; }
   if(!overs || overs<1){ state.formError="Overs must be at least 1."; save(); render(); return; }
   state.teamAName=a; state.teamBName=b; state.oversLimit=overs; state.formError="";
+  state.matchId = (crypto.randomUUID ? crypto.randomUUID() : (Date.now()+"-"+Math.random().toString(36).slice(2)));
+  state.matchDate = Date.now();
   state.screen="toss";
   save(); render();
 }
@@ -553,13 +577,14 @@ function battingList(inning){
   ["A","B"].forEach(k=>{ if(inning.batsmen[k].name) list.push({ ...inning.batsmen[k], out:false }); });
   return list;
 }
-function allPlayers(){
+function allPlayers(s){
+  s = s || state;
   const map = {};
   function ensure(name, teamKey){
     if(!map[name]) map[name] = { name, teamKey, runs:0, balls:0, fours:0, sixes:0, wickets:0, ballsBowled:0, runsConceded:0 };
     return map[name];
   }
-  state.innings.forEach(inning=>{
+  s.innings.forEach(inning=>{
     if(!inning) return;
     battingList(inning).forEach(p=>{
       const e = ensure(p.name, inning.battingKey);
@@ -581,7 +606,54 @@ function momSummary(p){
 }
 function chooseManOfMatch(name){
   state.manOfMatch = name;
+  save();
+  archiveMatch();
+  render();
+}
+const HISTORY_KEY = "gullyScorerHistory_v1";
+function loadHistory(){ try{ const raw=localStorage.getItem(HISTORY_KEY); return raw?JSON.parse(raw):[]; }catch(e){ return []; } }
+function saveHistory(list){ localStorage.setItem(HISTORY_KEY, JSON.stringify(list)); }
+function archiveMatch(){
+  if(!state.matchId || !state.innings[1]) return;
+  const history = loadHistory();
+  const idx = history.findIndex(h=>h.id===state.matchId);
+  const i1 = state.innings[0], i2 = state.innings[1];
+  const entry = {
+    id: state.matchId,
+    date: state.matchDate || null,
+    teamA: state.teamAName, teamB: state.teamBName,
+    oversLimit: state.oversLimit,
+    i1: { runs:i1.runs, wickets:i1.wickets, overs:oversText(i1.legalBalls) },
+    i2: { runs:i2.runs, wickets:i2.wickets, overs:oversText(i2.legalBalls) },
+    resultText: matchResult(state).text,
+    manOfMatch: state.manOfMatch,
+    fullState: JSON.parse(JSON.stringify(state))
+  };
+  if(idx>=0) history[idx] = entry; else history.unshift(entry);
+  saveHistory(history);
+}
+function openHistory(){
+  state._returnScreen = state.screen;
+  state.screen = "history";
   save(); render();
+}
+function closeHistory(){
+  state.screen = state._returnScreen || "setup";
+  save(); render();
+}
+function viewHistoryDetail(id){
+  state.viewingHistoryId = id;
+  state.screen = "history-detail";
+  save(); render();
+}
+function backToHistoryList(){
+  state.screen = "history";
+  save(); render();
+}
+function deleteHistoryEntry(id){
+  if(!confirm("Delete this match from history? This can't be undone.")) return;
+  saveHistory(loadHistory().filter(h=>h.id!==id));
+  render();
 }
 function breakdownText(p){
   return `1s ${p.ones||0} · 2s ${p.twos||0} · 3s ${p.threes||0} · 4s ${p.fours||0} · 6s ${p.sixes||0}`;
@@ -628,10 +700,13 @@ function screenHtml(){
   if(state.screen==="scoring") return scoringScreen();
   if(state.screen==="break") return breakScreen();
   if(state.screen==="result") return resultScreen();
+  if(state.screen==="history") return historyScreen();
+  if(state.screen==="history-detail") return historyDetailScreen();
   return setupScreen();
 }
 
 function setupScreen(){
+  const hasHistory = loadHistory().length>0;
   return `
     <main>
       <div class="eyebrow">Gully Score</div>
@@ -655,6 +730,7 @@ function setupScreen(){
         ${state.formError ? `<div class="error-text">${esc(state.formError)}</div>` : ""}
         <button class="btn btn-primary" onclick="startSetup()">Set overs &amp; continue</button>
       </div>
+      ${hasHistory ? `<button class="btn-ghost" style="width:100%; padding:11px 12px;" onclick="openHistory()">📜 Match history</button>` : ""}
     </main>
     <footer>Names and overs only — no squads to fill in.</footer>
   `;
@@ -805,15 +881,7 @@ function breakScreen(){
 
 function resultScreen(){
   const i1 = state.innings[0], i2 = state.innings[1];
-  let text, tied = false;
-  if(i2.runs > i1.runs){
-    const ballsLeft = state.oversLimit*6 - i2.legalBalls;
-    text = `${teamName(i2.battingKey)} won, chasing it down` + (ballsLeft>0 ? ` with ${oversText(ballsLeft)} overs unused` : "");
-  } else if(i2.runs < i1.runs){
-    text = `${teamName(i1.battingKey)} won by ${i1.runs - i2.runs} run${(i1.runs-i2.runs)===1?"":"s"}`;
-  } else {
-    text = "Match tied"; tied = true;
-  }
+  const { text, tied } = matchResult(state);
 
   const players = allPlayers().sort((a,b)=>momScore(b)-momScore(a));
   const suggested = players[0];
@@ -858,9 +926,67 @@ function resultScreen(){
       <div class="no-print" style="display:flex; flex-direction:column; gap:8px;">
         <button class="btn btn-export" onclick="exportScorecard()">⬇ Export PDF</button>
         <button class="btn btn-primary" onclick="newMatch()">New match</button>
+        <button class="btn-ghost" style="width:100%; padding:11px 12px;" onclick="openHistory()">📜 View all past matches</button>
       </div>
     </main>
-    <footer class="no-print">Scorecard saved on this device until you start a new match. Export PDF opens your browser's print dialog — choose "Save as PDF" as the destination.</footer>
+    <footer class="no-print">This match is saved to your match history. Export PDF opens your browser's print dialog — choose "Save as PDF" as the destination.</footer>
+  `;
+}
+
+function historyScreen(){
+  const history = loadHistory();
+  const cards = history.map(h=>`
+    <div class="card history-card">
+      <div class="history-top">
+        <div class="history-teams">${esc(h.teamA)} vs ${esc(h.teamB)}</div>
+        <div class="history-date">${h.date ? esc(new Date(h.date).toLocaleDateString()) : ""}</div>
+      </div>
+      <div class="history-score">${h.i1.runs}/${h.i1.wickets} (${h.i1.overs}) &nbsp;·&nbsp; ${h.i2.runs}/${h.i2.wickets} (${h.i2.overs})</div>
+      <div class="history-result">${esc(h.resultText)}</div>
+      ${h.manOfMatch ? `<div class="history-mom">🏅 ${esc(h.manOfMatch)}</div>` : ""}
+      <div class="util-row">
+        <button class="btn-ghost" onclick="viewHistoryDetail('${h.id}')">View scorecard</button>
+        <button class="btn-ghost" onclick="deleteHistoryEntry('${h.id}')">Delete</button>
+      </div>
+    </div>
+  `).join("");
+  return `
+    <main>
+      <div class="eyebrow">Match history</div>
+      <h1>Past matches</h1>
+      ${history.length ? cards : '<p class="lede">No finished matches yet — they will show up here once you complete one.</p>'}
+      <button class="btn-ghost" style="width:100%; padding:11px 12px;" onclick="closeHistory()">← Back</button>
+    </main>
+    <footer>Stored on this device only.</footer>
+  `;
+}
+
+function historyDetailScreen(){
+  const entry = loadHistory().find(h=>h.id===state.viewingHistoryId);
+  if(!entry) return historyScreen();
+  const s = entry.fullState;
+  const i1 = s.innings[0], i2 = s.innings[1];
+  const printHeader = `
+    <div class="print-only" style="margin-bottom:14px;">
+      <div style="font-weight:800; font-size:17px;">${esc(entry.teamA)} vs ${esc(entry.teamB)}</div>
+      <div style="font-size:11px; color:#444; margin-top:2px;">${entry.oversLimit}-over match${entry.date ? " · "+esc(new Date(entry.date).toLocaleDateString()) : ""}</div>
+    </div>
+  `;
+  return `
+    <main>
+      ${printHeader}
+      <div class="eyebrow no-print">Match history</div>
+      <h1 class="no-print">${esc(entry.teamA)} vs ${esc(entry.teamB)}</h1>
+      <p class="lede no-print">${entry.date ? esc(new Date(entry.date).toLocaleDateString())+" · " : ""}${esc(entry.resultText)}</p>
+      ${entry.manOfMatch ? `<div class="card mom-card"><div class="mom-eyebrow">🏅 Man of the match</div><div class="mom-name">${esc(entry.manOfMatch)}</div></div>` : ""}
+      <div class="card">${scorecardHtml(i1, "Innings 1")}</div>
+      <div class="card">${scorecardHtml(i2, "Innings 2")}</div>
+      <div class="no-print" style="display:flex; flex-direction:column; gap:8px;">
+        <button class="btn btn-export" onclick="exportScorecard()">⬇ Export PDF</button>
+        <button class="btn-ghost" style="width:100%; padding:11px 12px;" onclick="backToHistoryList()">← Back to history</button>
+      </div>
+    </main>
+    <footer class="no-print">Read-only — this match has already finished.</footer>
   `;
 }
 
