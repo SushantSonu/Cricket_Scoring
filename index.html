@@ -1,4 +1,5 @@
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Gully Score</title>
 <meta name="description" content="Fast, no-squad gully cricket scorer — set two teams and overs, enter batsmen and bowler only when they take the field.">
 <style>
@@ -129,10 +130,11 @@
     border-radius:7px;
     padding:11px 12px;
     font-size:16px;
+    width:100%;
   }
   .field input:focus{ border-color:var(--turf); }
   .field-row{ display:flex; gap:12px; }
-  .field-row .field{ flex:1; }
+  .field-row .field{ flex:1; min-width:0; }
 
   .btn{
     appearance:none; border:none; cursor:pointer;
