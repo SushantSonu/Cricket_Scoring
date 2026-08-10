@@ -103,6 +103,12 @@
     border-radius:20px;
     padding:4px 10px;
   }
+  .icon-btn{
+    flex-shrink:0; appearance:none; border:1px solid var(--card-line); background:transparent;
+    color:var(--ink-soft); border-radius:8px; width:32px; height:32px; font-size:15px;
+    display:flex; align-items:center; justify-content:center; cursor:pointer;
+  }
+  .icon-btn:hover{ border-color:var(--ink-soft); color:var(--ink); }
 
   main{ flex:1; padding:18px; display:flex; flex-direction:column; gap:16px; }
 
@@ -283,8 +289,21 @@
 
 <script>
 const STORAGE_KEY = "gullyScorerState_v1";
-let state = load() || freshState();
+function tryLoadFromHash(){
+  if(!location.hash || location.hash.indexOf("state=")===-1) return null;
+  try{
+    const raw = location.hash.replace(/^#?state=/, "");
+    const parsed = JSON.parse(decodeURIComponent(raw));
+    return migrateState(parsed);
+  }catch(e){ return null; }
+}
+const hashImport = tryLoadFromHash();
+let state = hashImport || load() || freshState();
 let undoStack = [];
+if(hashImport){
+  history.replaceState(null, "", location.pathname + location.search);
+  save();
+}
 
 function freshState(){
   return {
@@ -498,6 +517,19 @@ function endInningsManual(){
   inning.ended = true;
   inning.endReason = "manual";
   finishAction();
+}
+function buildTransferLink(){
+  const base = location.origin + location.pathname;
+  return base + "#state=" + encodeURIComponent(JSON.stringify(state));
+}
+function shareTransferLink(){
+  const link = buildTransferLink();
+  const done = () => alert("Link copied. Open it on your other device to pick up this exact match.");
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(link).then(done).catch(()=>{ prompt("Copy this link and open it on your other device:", link); });
+  } else {
+    prompt("Copy this link and open it on your other device:", link);
+  }
 }
 function startInnings2(){
   pushUndo();
@@ -737,6 +769,7 @@ function scoringScreen(){
       <div class="topbar-row">
         <div class="match-title">${esc(state.teamAName)} vs ${esc(state.teamBName)}</div>
         <div class="innings-pill">Innings ${state.inningsIndex+1} of 2</div>
+        <button class="icon-btn" onclick="shareTransferLink()" title="Continue on another device" aria-label="Continue on another device">🔗</button>
       </div>
     </div>
     <main>
@@ -764,6 +797,7 @@ function breakScreen(){
       <p class="lede">${esc(teamName(inning.bowlingKey))} need <b>${target}</b> to win off ${state.oversLimit} over${state.oversLimit===1?"":"s"}.</p>
       <div class="card">${scorecardHtml(inning, "Innings 1")}</div>
       <button class="btn btn-primary" onclick="startInnings2()">Start innings 2</button>
+      <button class="btn-ghost" style="width:100%; padding:11px 12px;" onclick="shareTransferLink()">🔗 Continue on another device</button>
     </main>
     <footer>You'll enter the new openers and the opening bowler next.</footer>
   `;
