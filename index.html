@@ -252,6 +252,24 @@
   }
 
   footer{ padding:16px 18px 26px; text-align:center; color:var(--ink-soft); font-size:11.5px; line-height:1.6; }
+
+  .print-only{ display:none; }
+  .no-print{ }
+  @media print{
+    body{ background:#fff; }
+    .shell{ box-shadow:none; max-width:none; background:#fff; }
+    .no-print{ display:none !important; }
+    .print-only{ display:block; }
+    .result-banner{ background:#fff !important; color:#111 !important; border:1.5px solid #111; }
+    .card, .mom-card, .crew-chip, .bowler-row{ background:#fff !important; border-color:#999 !important; box-shadow:none !important; }
+    .mom-card{ background:#fff !important; }
+    :root, :root[data-theme="dark"], :root[data-theme="light"]{
+      --ink:#111; --ink-soft:#444; --paper:#fff; --card:#fff; --card-line:#999; --line:#bbb;
+      --turf:#1f4d38; --turf-strong:#1f4d38; --turf-tint:#eef5f0; --ball:#8a2a20; --ball-tint:#fbeceA;
+      --bail:#7a5210; --bail-tint:#fbf1de;
+    }
+    main{ padding:0; gap:12px; }
+  }
 </style>
 
 <div class="shell" id="app"></div>
@@ -482,6 +500,7 @@ function startInnings2(){
   state.screen = "scoring";
   save(); render();
 }
+function exportScorecard(){ window.print(); }
 function newMatch(){
   if(!confirm("Start a new match? This clears the current scorecard.")) return;
   localStorage.removeItem(STORAGE_KEY);
@@ -767,15 +786,23 @@ function resultScreen(){
           <div class="mom-name">${esc(momPlayer.name)}</div>
           <div class="mom-figs">${esc(momSummary(momPlayer))} · ${esc(teamName(momPlayer.teamKey))}</div>
         </div>
-        <select class="mom-select" onchange="chooseManOfMatch(this.value)" aria-label="Change man of the match">
+        <select class="mom-select no-print" onchange="chooseManOfMatch(this.value)" aria-label="Change man of the match">
           ${players.map(p=>`<option value="${esc(p.name)}" ${p.name===momPlayer.name?"selected":""}>${esc(p.name)}</option>`).join("")}
         </select>
       </div>
     </div>
   ` : "";
 
+  const printHeader = `
+    <div class="print-only" style="margin-bottom:14px;">
+      <div style="font-weight:800; font-size:17px;">${esc(state.teamAName)} vs ${esc(state.teamBName)}</div>
+      <div style="font-size:11px; color:#444; margin-top:2px;">${state.oversLimit}-over match · ${esc(new Date().toLocaleDateString())}</div>
+    </div>
+  `;
+
   return `
     <main>
+      ${printHeader}
       <div class="result-banner">
         <div class="rb-trophy">${tied ? "🤝" : "🏆"}</div>
         <div class="rb-eyebrow">Full time</div>
@@ -787,9 +814,12 @@ function resultScreen(){
       ${momCard}
       <div class="card">${scorecardHtml(i1, "Innings 1")}</div>
       <div class="card">${scorecardHtml(i2, "Innings 2")}</div>
-      <button class="btn btn-primary" onclick="newMatch()">New match</button>
+      <div class="no-print" style="display:flex; flex-direction:column; gap:8px;">
+        <button class="btn btn-ghost" style="width:100%; padding:13px 16px;" onclick="exportScorecard()">⬇ Export PDF</button>
+        <button class="btn btn-primary" onclick="newMatch()">New match</button>
+      </div>
     </main>
-    <footer>Scorecard saved on this device until you start a new match.</footer>
+    <footer class="no-print">Scorecard saved on this device until you start a new match. Export PDF opens your browser's print dialog — choose "Save as PDF" as the destination.</footer>
   `;
 }
 
