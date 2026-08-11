@@ -413,11 +413,15 @@ function checkInningsEnd(inning){
   if(ended){ inning.ended=true; inning.endReason=reason; }
 }
 function afterLegalBall(inning){
-  if(inning.legalBalls % 6 === 0){
+  const overJustCompleted = inning.legalBalls % 6 === 0;
+  if(overJustCompleted){
     toggleStrike(inning);
     inning.thisOverBalls = [];
   }
   checkInningsEnd(inning);
+  if(overJustCompleted && !inning.ended){
+    inning.currentBowler = null;
+  }
 }
 function finishAction(){
   const inning = currentInning();
@@ -761,10 +765,25 @@ function tossScreen(){
 function entryFormHtml(inning){
   const needA = !inning.batsmen.A.name, needB = !inning.batsmen.B.name, needBowler = !inning.currentBowler;
   const isInningsStart = needA && needB && needBowler;
+  const needNewBatsman = needA || needB;
+  let title, hint;
+  if(isInningsStart){
+    title = "Send the openers in";
+    hint = "Enter the two openers and the first bowler to start this innings.";
+  } else if(needNewBatsman && needBowler){
+    title = "New batsman &amp; new over";
+    hint = "A wicket fell on the last ball of the over — enter the incoming batsman and the next bowler.";
+  } else if(needBowler){
+    title = "Over complete — who's bowling next?";
+    hint = "Enter the name of the bowler for this end.";
+  } else {
+    title = "New batsman";
+    hint = "Enter the name of the incoming batsman.";
+  }
   return `
     <div class="card entry-card">
-      <div class="entry-title">${isInningsStart ? "Send the openers in" : (needBowler ? "Who's bowling?" : "New batsman")}</div>
-      <div class="entry-hint">${isInningsStart ? "Enter the two openers and the first bowler to start this innings." : (needBowler ? "Enter the name of the bowler for this end." : "Enter the name of the incoming batsman.")}</div>
+      <div class="entry-title">${title}</div>
+      <div class="entry-hint">${hint}</div>
       ${needA ? `<div class="field"><label for="entryA">Batsman — on strike</label><input id="entryA" type="text" maxlength="24" placeholder="Name"></div>` : ""}
       ${needB ? `<div class="field"><label for="entryB">Batsman — non-strike</label><input id="entryB" type="text" maxlength="24" placeholder="Name"></div>` : ""}
       ${needBowler ? `<div class="field"><label for="entryBowler">Bowler</label><input id="entryBowler" type="text" maxlength="24" placeholder="Name"></div>` : ""}
