@@ -1,5 +1,8 @@
+<!-- © 2026 Sushant Kumar — Cric Score. All rights reserved. -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="author" content="Sushant Kumar">
+<meta name="copyright" content="© 2026 Sushant Kumar. All rights reserved.">
 <title>Cric Score</title>
 <meta name="description" content="Fast, no-squad gully cricket scorer — set two teams and overs, enter batsmen and bowler only when they take the field.">
 <link rel="manifest" href="manifest.json">
@@ -298,6 +301,7 @@
   .history-mom{ font-size:12px; color:var(--bail); }
 
   footer{ padding:16px 18px 26px; text-align:center; color:var(--ink-soft); font-size:11.5px; line-height:1.6; }
+  .copyright{ font-size:10.5px; color:var(--ink-soft); text-align:center; margin-top:2px; }
 
   .print-only{ display:none; }
   .no-print{ }
@@ -395,6 +399,9 @@ function migrateState(s){
   return s;
 }
 function load(){ try{ const raw=localStorage.getItem(STORAGE_KEY); return raw?migrateState(JSON.parse(raw)):null; }catch(e){ return null; } }
+function copyrightLine(){
+  return `<div class="copyright">&copy; ${new Date().getFullYear()} Sushant Kumar &mdash; Cric Score. All rights reserved.</div>`;
+}
 function pushUndo(){
   const snap = JSON.parse(JSON.stringify(state));
   undoStack.push(snap);
@@ -771,7 +778,7 @@ function welcomeScreen(){
       <button class="btn btn-primary" onclick="goToSetup()">Start scoring →</button>
       ${hasHistory ? `<button class="btn-ghost" style="width:100%; padding:11px 12px;" onclick="openHistory()">📜 Match history</button>` : ""}
     </main>
-    <footer>Everything stays on this device.</footer>
+    <footer>Everything stays on this device.${copyrightLine()}</footer>
   `;
 }
 
@@ -1013,6 +1020,7 @@ function resultScreen(){
         <button class="btn btn-primary" onclick="newMatch()">New match</button>
         <button class="btn-ghost" style="width:100%; padding:11px 12px;" onclick="openHistory()">📜 View all past matches</button>
       </div>
+      ${copyrightLine()}
     </main>
     <footer class="no-print">This match is saved to your match history. Export PDF opens your browser's print dialog — choose "Save as PDF" as the destination.</footer>
   `;
@@ -1070,6 +1078,7 @@ function historyDetailScreen(){
         <button class="btn btn-export" onclick="exportScorecard()">⬇ Export PDF</button>
         <button class="btn-ghost" style="width:100%; padding:11px 12px;" onclick="backToHistoryList()">← Back to history</button>
       </div>
+      ${copyrightLine()}
     </main>
     <footer class="no-print">Read-only — this match has already finished.</footer>
   `;
