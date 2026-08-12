@@ -119,6 +119,22 @@
   }
   .icon-btn:hover{ border-color:var(--ink-soft); color:var(--ink); }
 
+  .hero{
+    background: radial-gradient(circle at 32% 26%, #f7b044 0%, #c96a1f 52%, #5e2e10 100%);
+    padding: 40px 24px 32px;
+    text-align: center;
+    color: #fff;
+  }
+  .hero-icon{ border-radius: 22px; box-shadow: 0 12px 28px rgba(30,15,0,0.4); margin-bottom: 16px; }
+  .hero-title{ font-size: 27px; font-weight: 800; letter-spacing: -0.01em; text-shadow: 0 1px 3px rgba(0,0,0,0.3); }
+  .hero-tag{
+    font-size: 13.5px; color: rgba(255,255,255,0.9); margin: 6px auto 0;
+    max-width: 28ch; line-height: 1.5;
+  }
+  .pitch-list{ display: flex; flex-direction: column; gap: 13px; margin-bottom: 6px; }
+  .pitch-item{ display: flex; align-items: flex-start; gap: 12px; font-size: 13.5px; color: var(--ink-soft); line-height: 1.5; }
+  .pitch-ico{ font-size: 18px; flex-shrink: 0; line-height: 1.3; }
+
   main{ flex:1; padding:18px; display:flex; flex-direction:column; gap:16px; }
 
   .eyebrow{
@@ -315,7 +331,7 @@ function tryLoadFromHash(){
   }catch(e){ return null; }
 }
 const hashImport = tryLoadFromHash();
-let state = hashImport || load() || freshState();
+let state = hashImport || load() || { ...freshState(), screen: "welcome" };
 let undoStack = [];
 if(hashImport){
   history.replaceState(null, "", location.pathname + location.search);
@@ -713,6 +729,7 @@ function render(){
 }
 
 function screenHtml(){
+  if(state.screen==="welcome") return welcomeScreen();
   if(state.screen==="setup") return setupScreen();
   if(state.screen==="toss") return tossScreen();
   if(state.screen==="scoring") return scoringScreen();
@@ -720,7 +737,33 @@ function screenHtml(){
   if(state.screen==="result") return resultScreen();
   if(state.screen==="history") return historyScreen();
   if(state.screen==="history-detail") return historyDetailScreen();
-  return setupScreen();
+  return welcomeScreen();
+}
+
+function goToSetup(){
+  state.screen = "setup";
+  save(); render();
+}
+
+function welcomeScreen(){
+  const hasHistory = loadHistory().length>0;
+  return `
+    <div class="hero">
+      <img src="icon-512.png" alt="" class="hero-icon" width="88" height="88">
+      <div class="hero-title">Gully Score</div>
+      <div class="hero-tag">The fastest way to keep score on the street</div>
+    </div>
+    <main>
+      <div class="pitch-list">
+        <div class="pitch-item"><span class="pitch-ico">⚡</span><span>Two team names, an overs count, done — no squads to fill in</span></div>
+        <div class="pitch-item"><span class="pitch-ico">✍️</span><span>Batsmen and bowler are named only when they actually take the field</span></div>
+        <div class="pitch-item"><span class="pitch-ico">🏅</span><span>Full scorecard, Man of the Match and match history, every game</span></div>
+      </div>
+      <button class="btn btn-primary" onclick="goToSetup()">Start scoring →</button>
+      ${hasHistory ? `<button class="btn-ghost" style="width:100%; padding:11px 12px;" onclick="openHistory()">📜 Match history</button>` : ""}
+    </main>
+    <footer>Everything stays on this device.</footer>
+  `;
 }
 
 function setupScreen(){
