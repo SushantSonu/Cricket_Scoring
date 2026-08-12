@@ -477,7 +477,12 @@ function confirmEntries(){
 function changeBowler(){
   if(hasPending()) return;
   pushUndo();
-  currentInning().currentBowler = null;
+  const inning = currentInning();
+  const name = inning.currentBowler;
+  if(inning.bowlers[name] && inning.bowlers[name].balls === 0){
+    delete inning.bowlers[name];
+  }
+  inning.currentBowler = null;
   save(); render();
 }
 function addRuns(n){
@@ -603,7 +608,7 @@ function allPlayers(s){
       const e = ensure(p.name, inning.battingKey);
       e.runs += p.runs; e.balls += p.balls; e.fours += (p.fours||0); e.sixes += (p.sixes||0);
     });
-    Object.entries(inning.bowlers).forEach(([name,f])=>{
+    Object.entries(inning.bowlers).filter(([,f])=>f.balls>0).forEach(([name,f])=>{
       const e = ensure(name, inning.bowlingKey);
       e.wickets += f.wickets; e.ballsBowled += f.balls; e.runsConceded += f.runs;
     });
@@ -673,7 +678,7 @@ function breakdownText(p){
 }
 function scorecardHtml(inning, label){
   const bats = battingList(inning);
-  const bowlers = Object.entries(inning.bowlers);
+  const bowlers = Object.entries(inning.bowlers).filter(([,f])=>f.balls>0);
   let batRows = bats.map(p=>`
     <div class="bat-row">
       <div class="bat-row-top">
