@@ -565,7 +565,7 @@ function addWicket(){
   });
   inning.thisOverBalls.push("W");
   afterLegalBall(inning);
-  if(!inning.ended){ inning.batsmen[key] = emptyBatsman(); }
+  inning.batsmen[key] = emptyBatsman();
   finishAction();
 }
 function endInningsManual(){
