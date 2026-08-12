@@ -1,6 +1,6 @@
 {
-  "name": "Gully Score",
-  "short_name": "Gully Score",
+  "name": "Cric Score",
+  "short_name": "Cric Score",
   "description": "A no-squad gully cricket scorer — set two teams and overs, enter batsmen and bowler only when they take the field.",
   "start_url": "./index.html",
   "scope": "./",
