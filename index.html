@@ -130,7 +130,7 @@
     color: #fff;
   }
   .hero-menu-btn{
-    position: absolute; top: 14px; right: 14px;
+    position: absolute; top: 14px; left: 14px;
     appearance: none; border: none; cursor: pointer;
     width: 36px; height: 36px; border-radius: 50%;
     background: rgba(0,0,0,0.22); color: #fff; font-size: 17px;
@@ -151,6 +151,15 @@
   .info-body p{ margin: 0 0 14px; }
   .info-body ol, .info-body ul{ margin: 0 0 14px; padding-left: 20px; }
   .info-body li{ margin-bottom: 8px; }
+  .contact-row{
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px 0; border-top: 1px solid var(--card-line);
+    font-size: 14.5px; font-weight: 600;
+  }
+  .contact-row:first-of-type{ border-top: none; }
+  .contact-row .contact-ico{ font-size: 18px; flex-shrink: 0; }
+  .contact-row a{ color: var(--turf-strong); text-decoration: none; }
+  .contact-row a:hover{ text-decoration: underline; }
   .hero-icon{ border-radius: 22px; box-shadow: 0 12px 28px rgba(30,15,0,0.4); margin-bottom: 16px; }
   .hero-title{ font-size: 27px; font-weight: 800; letter-spacing: -0.01em; text-shadow: 0 1px 3px rgba(0,0,0,0.3); }
   .hero-tag{
@@ -810,6 +819,7 @@ function menuScreen(){
         <button class="menu-item" onclick="goToInfo('about')"><span class="menu-ico">ℹ️</span><span>About</span><span class="menu-arrow">→</span></button>
         <button class="menu-item" onclick="goToInfo('howto')"><span class="menu-ico">📖</span><span>How to use</span><span class="menu-arrow">→</span></button>
         <button class="menu-item" onclick="goToInfo('privacy')"><span class="menu-ico">🔒</span><span>Privacy</span><span class="menu-arrow">→</span></button>
+        <button class="menu-item" onclick="goToInfo('contact')"><span class="menu-ico">📞</span><span>Contact &amp; Support</span><span class="menu-arrow">→</span></button>
       </div>
       <button class="btn-ghost" style="width:100%; padding:11px 12px; margin-top:8px;" onclick="closeMenu()">← Back</button>
     </main>
@@ -851,6 +861,15 @@ const INFO_CONTENT = {
       <p>Cric Score doesn't have a server, an account system, or any analytics. Every match — live or in your history — is stored only in your browser's local storage, on your own device.</p>
       <p>Nothing is uploaded, synced, or shared automatically. If you use the "continue on another device" link, your match data travels only inside that link itself, which you choose to send.</p>
       <p>Clearing your browser's site data, or uninstalling the app, permanently removes everything — there's no backup copy anywhere else.</p>
+    `
+  },
+  contact: {
+    title: "Contact & Support",
+    icon: "📞",
+    body: `
+      <p>Found a bug, or have a suggestion? Reach out any time:</p>
+      <div class="contact-row"><span class="contact-ico">📞</span><a href="tel:+918178000377">+91 8178000377</a></div>
+      <div class="contact-row"><span class="contact-ico">✉️</span><a href="mailto:cricscore@gmail.com">cricscore@gmail.com</a></div>
     `
   }
 };
