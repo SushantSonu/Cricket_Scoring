@@ -123,11 +123,34 @@
   .icon-btn:hover{ border-color:var(--ink-soft); color:var(--ink); }
 
   .hero{
+    position: relative;
     background: radial-gradient(circle at 32% 26%, #f7b044 0%, #c96a1f 52%, #5e2e10 100%);
     padding: 40px 24px 32px;
     text-align: center;
     color: #fff;
   }
+  .hero-menu-btn{
+    position: absolute; top: 14px; right: 14px;
+    appearance: none; border: none; cursor: pointer;
+    width: 36px; height: 36px; border-radius: 50%;
+    background: rgba(0,0,0,0.22); color: #fff; font-size: 17px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .hero-menu-btn:hover{ background: rgba(0,0,0,0.34); }
+  .menu-list{ display: flex; flex-direction: column; gap: 10px; }
+  .menu-item{
+    display: flex; align-items: center; gap: 12px;
+    background: var(--card); border: 1px solid var(--card-line); border-radius: 10px;
+    padding: 14px 16px; font-size: 14.5px; font-weight: 700; color: var(--ink);
+    cursor: pointer; text-align: left; width: 100%;
+  }
+  .menu-item:hover{ border-color: var(--turf); }
+  .menu-item .menu-ico{ font-size: 18px; flex-shrink: 0; }
+  .menu-item .menu-arrow{ margin-left: auto; color: var(--ink-soft); font-weight: 400; }
+  .info-body{ font-size: 14px; line-height: 1.7; color: var(--ink); }
+  .info-body p{ margin: 0 0 14px; }
+  .info-body ol, .info-body ul{ margin: 0 0 14px; padding-left: 20px; }
+  .info-body li{ margin-bottom: 8px; }
   .hero-icon{ border-radius: 22px; box-shadow: 0 12px 28px rgba(30,15,0,0.4); margin-bottom: 16px; }
   .hero-title{ font-size: 27px; font-weight: 800; letter-spacing: -0.01em; text-shadow: 0 1px 3px rgba(0,0,0,0.3); }
   .hero-tag{
@@ -361,7 +384,8 @@ function freshState(){
     manOfMatch: null,
     matchId: null,
     matchDate: null,
-    lastOpenDate: null
+    lastOpenDate: null,
+    infoKind: null
   };
 }
 function emptyBatsman(){ return { name:null, runs:0, balls:0, out:false, ones:0, twos:0, threes:0, fours:0, sixes:0 }; }
@@ -753,7 +777,95 @@ function screenHtml(){
   if(state.screen==="result") return resultScreen();
   if(state.screen==="history") return historyScreen();
   if(state.screen==="history-detail") return historyDetailScreen();
+  if(state.screen==="menu") return menuScreen();
+  if(state.screen==="info") return infoScreen();
   return welcomeScreen();
+}
+
+function openMenu(){
+  state._returnScreen = state.screen;
+  state.screen = "menu";
+  save(); render();
+}
+function closeMenu(){
+  state.screen = state._returnScreen || "welcome";
+  save(); render();
+}
+function goToInfo(kind){
+  state.infoKind = kind;
+  state.screen = "info";
+  save(); render();
+}
+function backToMenu(){
+  state.screen = "menu";
+  save(); render();
+}
+
+function menuScreen(){
+  return `
+    <main>
+      <div class="eyebrow">Menu</div>
+      <h1>Cric Score</h1>
+      <div class="menu-list">
+        <button class="menu-item" onclick="goToInfo('about')"><span class="menu-ico">ℹ️</span><span>About</span><span class="menu-arrow">→</span></button>
+        <button class="menu-item" onclick="goToInfo('howto')"><span class="menu-ico">📖</span><span>How to use</span><span class="menu-arrow">→</span></button>
+        <button class="menu-item" onclick="goToInfo('privacy')"><span class="menu-ico">🔒</span><span>Privacy</span><span class="menu-arrow">→</span></button>
+      </div>
+      <button class="btn-ghost" style="width:100%; padding:11px 12px; margin-top:8px;" onclick="closeMenu()">← Back</button>
+    </main>
+    <footer>${copyrightLine()}</footer>
+  `;
+}
+
+const INFO_CONTENT = {
+  about: {
+    title: "About Cric Score",
+    icon: "ℹ️",
+    body: `
+      <p>Cric Score is a fast, no-fuss scorer for gully (street) cricket. Enter two team names and an overs count to start a match — there's no squad list to fill in beforehand.</p>
+      <p>Batsmen and the bowler are only named the moment they actually step up to bat or bowl, so setup takes seconds, not minutes.</p>
+      <p>Every match gets a full scorecard — runs, balls, boundaries, wickets, bowling figures — an automatically suggested Man of the Match, and a saved match history you can revisit or export as a PDF anytime.</p>
+      <p>It runs entirely in your browser. No account, no server, and once it's loaded once, no internet connection required.</p>
+      <p style="color:var(--ink-soft); font-size:12.5px;">Built by Sushant Kumar.</p>
+    `
+  },
+  howto: {
+    title: "How to use",
+    icon: "📖",
+    body: `
+      <ol>
+        <li>Tap <b>Start scoring</b>, enter both team names and the number of overs, then pick who bats first.</li>
+        <li>Enter the opening batsmen and bowler — only once play actually begins.</li>
+        <li>Score each ball with the run buttons, or tag Wide, No ball, Bye, Leg bye, or Wicket.</li>
+        <li>After a wicket, or once an over ends, you'll be asked for the next batsman or bowler before you can keep scoring.</li>
+        <li>When an innings finishes, set up the next one the same way.</li>
+        <li>At the end of the match, review the scorecard, confirm the Man of the Match, and export to PDF or save it to history.</li>
+        <li>Mid-match, tap the 🔗 icon to continue scoring on a different device.</li>
+      </ol>
+    `
+  },
+  privacy: {
+    title: "Privacy",
+    icon: "🔒",
+    body: `
+      <p>Cric Score doesn't have a server, an account system, or any analytics. Every match — live or in your history — is stored only in your browser's local storage, on your own device.</p>
+      <p>Nothing is uploaded, synced, or shared automatically. If you use the "continue on another device" link, your match data travels only inside that link itself, which you choose to send.</p>
+      <p>Clearing your browser's site data, or uninstalling the app, permanently removes everything — there's no backup copy anywhere else.</p>
+    `
+  }
+};
+
+function infoScreen(){
+  const info = INFO_CONTENT[state.infoKind] || INFO_CONTENT.about;
+  return `
+    <main>
+      <div class="eyebrow">${info.icon} Menu</div>
+      <h1>${esc(info.title)}</h1>
+      <div class="card info-body">${info.body}</div>
+      <button class="btn-ghost" style="width:100%; padding:11px 12px;" onclick="backToMenu()">← Back to menu</button>
+    </main>
+    <footer>${copyrightLine()}</footer>
+  `;
 }
 
 function goToSetup(){
@@ -765,6 +877,7 @@ function welcomeScreen(){
   const hasHistory = loadHistory().length>0;
   return `
     <div class="hero">
+      <button class="hero-menu-btn" onclick="openMenu()" title="Menu" aria-label="Menu">☰</button>
       <img src="icon-512.png" alt="" class="hero-icon" width="88" height="88">
       <div class="hero-title">Cric Score</div>
       <div class="hero-tag">The fastest way to keep score on the street</div>
