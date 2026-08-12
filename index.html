@@ -336,6 +336,14 @@ let undoStack = [];
 if(hashImport){
   history.replaceState(null, "", location.pathname + location.search);
   save();
+} else {
+  const today = new Date().toISOString().slice(0, 10);
+  const midMatchScreens = ["scoring", "toss", "break"];
+  if(state.lastOpenDate !== today && !midMatchScreens.includes(state.screen)){
+    state.screen = "welcome";
+  }
+  state.lastOpenDate = today;
+  save();
 }
 
 function freshState(){
@@ -348,7 +356,8 @@ function freshState(){
     formError: "",
     manOfMatch: null,
     matchId: null,
-    matchDate: null
+    matchDate: null,
+    lastOpenDate: null
   };
 }
 function emptyBatsman(){ return { name:null, runs:0, balls:0, out:false, ones:0, twos:0, threes:0, fours:0, sixes:0 }; }
