@@ -155,23 +155,14 @@
     text-align: center;
     color: #fff;
   }
-  .hero-menu-btn{
-    position: absolute; top: 14px; left: 14px;
-    appearance: none; cursor: pointer;
-    width: 40px; height: 40px; border-radius: 50%;
-    background: rgba(255,255,255,0.16);
-    border: 1px solid rgba(255,255,255,0.35);
-    backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
-    box-shadow: 0 4px 14px rgba(0,0,0,0.25);
-    color: #fff;
+  .boot-splash{
+    min-height: 100vh; min-height: 100dvh;
     display: flex; align-items: center; justify-content: center;
-    transition: transform .15s ease, background .15s ease;
+    background: radial-gradient(circle at 32% 26%, #f7b044 0%, #c96a1f 52%, #5e2e10 100%);
   }
-  .hero-menu-btn svg{ width: 18px; height: 18px; display: block; }
-  .hero-menu-btn:hover{ background: rgba(255,255,255,0.28); }
-  .hero-menu-btn:active{ transform: scale(0.92); }
-  .hero-chat-btn{
-    position: absolute; top: 14px; right: 14px;
+  .boot-splash img{ border-radius: 30px; box-shadow: 0 12px 28px rgba(30,15,0,0.4); display: block; }
+  .hero-menu-btn, .hero-bell-btn, .hero-chat-btn{
+    position: absolute;
     appearance: none; cursor: pointer;
     width: 40px; height: 40px; border-radius: 50%;
     background: rgba(255,255,255,0.16);
@@ -182,8 +173,17 @@
     display: flex; align-items: center; justify-content: center;
     transition: transform .15s ease, background .15s ease;
   }
-  .hero-chat-btn:hover{ background: rgba(255,255,255,0.28); }
-  .hero-chat-btn:active{ transform: scale(0.92); }
+  .hero-menu-btn{ top: 14px; left: 14px; }
+  .hero-bell-btn{ top: 14px; left: 62px; }
+  .hero-chat-btn{ bottom: 14px; left: 14px; }
+  .hero-menu-btn svg{ width: 18px; height: 18px; display: block; }
+  .hero-menu-btn:hover, .hero-bell-btn:hover, .hero-chat-btn:hover{ background: rgba(255,255,255,0.28); }
+  .hero-menu-btn:active, .hero-bell-btn:active, .hero-chat-btn:active{ transform: scale(0.92); }
+  .hero-bell-btn .notif-dot{
+    position: absolute; top: 6px; right: 6px;
+    width: 9px; height: 9px; border-radius: 50%;
+    background: var(--ball, #e2685a); border: 1.5px solid rgba(0,0,0,0.3);
+  }
   .menu-list{ display: flex; flex-direction: column; gap: 10px; }
   .menu-item{
     display: flex; align-items: center; gap: 12px;
@@ -479,7 +479,7 @@
   }
 </style>
 
-<div class="shell" id="app"></div>
+<div class="shell" id="app"><div class="boot-splash"><img src="icon-512.png" alt="" width="128" height="128"></div></div>
 
 <script>
 const STORAGE_KEY = "gullyScorerState_v1";
@@ -561,6 +561,14 @@ function migrateState(s){
 function load(){ try{ const raw=localStorage.getItem(STORAGE_KEY); return raw?migrateState(JSON.parse(raw)):null; }catch(e){ return null; } }
 function copyrightLine(){
   return `<div class="copyright">&copy; ${new Date().getFullYear()} Sushant Kumar &mdash; Cric Score. All rights reserved.</div>`;
+}
+const NOTIF_SEEN_KEY = "gullyScorerNotifSeen_v1";
+function hasUnseenNotifications(){
+  return !localStorage.getItem(NOTIF_SEEN_KEY);
+}
+function goToNotifications(){
+  localStorage.setItem(NOTIF_SEEN_KEY, "1");
+  goToInfo("notifications");
 }
 function pushUndo(){
   const snap = JSON.parse(JSON.stringify(state));
@@ -952,7 +960,8 @@ let navStack = [];
 let lastRenderedSnapshot = null;
 let suppressNavPush = false;
 function render(){
-  if(!suppressNavPush && lastRenderedSnapshot && lastRenderedSnapshot.screen !== state.screen){
+  const screenChanged = !lastRenderedSnapshot || lastRenderedSnapshot.screen !== state.screen;
+  if(!suppressNavPush && lastRenderedSnapshot && screenChanged){
     navStack.push(lastRenderedSnapshot);
     history.pushState({navDepth: navStack.length}, "", location.href);
   }
@@ -961,6 +970,7 @@ function render(){
 
   document.documentElement.setAttribute("data-app-screen", state.screen);
   document.getElementById("app").innerHTML = screenHtml();
+  if(screenChanged) window.scrollTo(0, 0);
   if(state.screen==="result" && state.matchId && state.matchId!==lastFireworksMatchId){
     lastFireworksMatchId = state.matchId;
     if(!window.matchMedia("(prefers-reduced-motion: reduce)").matches){
@@ -1123,12 +1133,13 @@ function closeMenu(){
   save(); render();
 }
 function goToInfo(kind){
+  state._infoReturnScreen = state.screen;
   state.infoKind = kind;
   state.screen = "info";
   save(); render();
 }
-function backToMenu(){
-  state.screen = "menu";
+function backFromInfo(){
+  state.screen = state._infoReturnScreen || "menu";
   save(); render();
 }
 
@@ -1152,6 +1163,15 @@ function menuScreen(){
 }
 
 const INFO_CONTENT = {
+  notifications: {
+    title: "Notifications",
+    icon: "🔔",
+    tintVar: "--bail-tint",
+    body: `
+      <p>You're all caught up — nothing new right now.</p>
+      <p style="color:var(--ink-soft); font-size:12.5px;">This is where we'll let you know about new features, tips, and app updates.</p>
+    `
+  },
   about: {
     title: "About Cric Score",
     icon: "ℹ️",
@@ -1304,11 +1324,11 @@ function infoScreen(){
   ` : "";
   return `
     <main>
-      <div class="eyebrow">${info.icon} Menu</div>
+      <div class="eyebrow">${info.icon} Cric Score</div>
       <h1>${esc(info.title)}</h1>
       ${langToggle}
       <div class="card info-body" style="background:var(${info.tintVar || "--card"});">${bodyToShow}</div>
-      <button class="btn-back" onclick="backToMenu()">← Back to menu</button>
+      <button class="btn-back" onclick="backFromInfo()">← Back</button>
     </main>
     <footer>${copyrightLine()}</footer>
   `;
@@ -1427,6 +1447,7 @@ function welcomeScreen(){
       <button class="hero-menu-btn" onclick="openMenu()" title="Menu" aria-label="Menu">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg>
       </button>
+      <button class="hero-bell-btn" onclick="goToNotifications()" title="Notifications" aria-label="Notifications">🔔${hasUnseenNotifications() ? '<span class="notif-dot"></span>' : ""}</button>
       <button class="hero-chat-btn" onclick="goToChat()" title="Ask about cricket rules" aria-label="Ask about cricket rules">💬</button>
       <img src="icon-512.png" alt="" class="hero-icon" width="128" height="128">
       <div class="hero-title">Cric Score</div>
@@ -1460,8 +1481,8 @@ function setupScreen(){
         <div class="eyebrow" style="margin:0;">Cric Score</div>
         <button class="icon-btn" onclick="backToWelcome()" title="Home" aria-label="Home">🏠</button>
       </div>
-      <h1>New match</h1>
-      <p class="lede">Two team names and an overs count — nothing else. Batsmen and the bowler go in once play actually starts.</p>
+      <h1 style="text-align:center;">New match</h1>
+      <p class="lede" style="text-align:center; margin-left:auto; margin-right:auto;">Two team names and an overs count — nothing else. Batsmen and the bowler go in once play actually starts.</p>
       <div class="card">
         <div class="field-row">
           <div class="field">
