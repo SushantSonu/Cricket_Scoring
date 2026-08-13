@@ -161,7 +161,7 @@
     background: radial-gradient(circle at 32% 26%, #f7b044 0%, #c96a1f 52%, #5e2e10 100%);
   }
   .boot-splash img{ border-radius: 50%; object-fit: cover; box-shadow: 0 12px 28px rgba(30,15,0,0.4); display: block; }
-  .hero-menu-btn, .hero-bell-btn, .hero-chat-btn{
+  .hero-menu-btn, .hero-bell-btn{
     position: absolute;
     appearance: none; cursor: pointer;
     width: 40px; height: 40px; border-radius: 50%;
@@ -175,15 +175,26 @@
   }
   .hero-menu-btn{ top: 14px; left: 14px; }
   .hero-bell-btn{ top: 14px; right: 14px; }
-  .hero-chat-btn{ bottom: 40px; right: 14px; }
   .hero-menu-btn svg{ width: 18px; height: 18px; display: block; }
-  .hero-menu-btn:hover, .hero-bell-btn:hover, .hero-chat-btn:hover{ background: rgba(255,255,255,0.28); }
-  .hero-menu-btn:active, .hero-bell-btn:active, .hero-chat-btn:active{ transform: scale(0.92); }
+  .hero-menu-btn:hover, .hero-bell-btn:hover{ background: rgba(255,255,255,0.28); }
+  .hero-menu-btn:active, .hero-bell-btn:active{ transform: scale(0.92); }
   .hero-bell-btn .notif-dot{
     position: absolute; top: 6px; right: 6px;
     width: 9px; height: 9px; border-radius: 50%;
     background: var(--ball, #e2685a); border: 1.5px solid rgba(0,0,0,0.3);
   }
+  .home-chat-btn{
+    position: absolute;
+    bottom: calc(96px + env(safe-area-inset-bottom, 0px));
+    right: 18px;
+    width: 56px; height: 56px; border-radius: 50%;
+    appearance: none; border: none; cursor: pointer;
+    background: var(--turf); color: #fff; font-size: 24px;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 8px 20px rgba(0,0,0,0.3); z-index: 5;
+  }
+  .home-chat-btn:hover{ filter: brightness(1.06); }
+  .home-chat-btn:active{ transform: scale(0.94); }
   .menu-list{ display: flex; flex-direction: column; gap: 10px; }
   .menu-item{
     display: flex; align-items: center; gap: 12px;
@@ -1448,12 +1459,12 @@ function welcomeScreen(){
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg>
       </button>
       <button class="hero-bell-btn" onclick="goToNotifications()" title="Notifications" aria-label="Notifications">🔔${hasUnseenNotifications() ? '<span class="notif-dot"></span>' : ""}</button>
-      <button class="hero-chat-btn" onclick="goToChat()" title="Ask about cricket rules" aria-label="Ask about cricket rules">💬</button>
       <img src="icon-512.png" alt="" class="hero-icon" width="128" height="128">
       <div class="hero-title">Cric Score</div>
       <div class="hero-tag">The fastest way to keep score on the street</div>
     </div>
-    <main>
+    <button class="home-chat-btn" onclick="goToChat()" title="Ask about cricket rules" aria-label="Ask about cricket rules">💬</button>
+    <main style="padding-bottom:100px;">
       <div class="pitch-list">
         <div class="pitch-item"><span class="pitch-ico">⚡</span><span>Two team names, an overs count, done — no squads to fill in</span></div>
         <div class="pitch-item"><span class="pitch-ico">✍️</span><span>Batsmen and bowler are named only when they actually take the field</span></div>
