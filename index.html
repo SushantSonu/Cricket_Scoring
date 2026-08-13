@@ -163,6 +163,42 @@
   .contact-row .contact-ico{ font-size: 18px; flex-shrink: 0; }
   .contact-row a{ color: var(--turf-strong); text-decoration: none; }
   .contact-row a:hover{ text-decoration: underline; }
+  .btn-chat{
+    width: 100%; padding: 11px 12px;
+    background: var(--turf-tint); color: var(--turf-strong); border: 1px solid transparent;
+    font-size: 15px; font-weight: 700;
+  }
+  .btn-chat:hover{ filter: brightness(0.97); }
+  .chat-messages{
+    display: flex; flex-direction: column; gap: 10px;
+    max-height: 48vh; overflow-y: auto; padding: 2px 2px 4px;
+  }
+  .chat-bubble{ max-width: 84%; padding: 10px 13px; border-radius: 12px; font-size: 13.5px; line-height: 1.5; }
+  .chat-bubble-user{ align-self: flex-end; background: var(--turf); color: #fff; border-bottom-right-radius: 3px; }
+  .chat-bubble-bot{ align-self: flex-start; background: var(--paper); border: 1px solid var(--card-line); color: var(--ink); border-bottom-left-radius: 3px; }
+  .chat-google-btn{
+    display: inline-block; margin-top: 8px; font-size: 12px; font-weight: 700;
+    color: var(--turf-strong); text-decoration: none; border: 1px solid var(--card-line);
+    border-radius: 20px; padding: 5px 11px;
+  }
+  .chat-google-btn:hover{ border-color: var(--turf); }
+  .chat-suggestions{ display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+  .chat-chip{
+    appearance: none; border: 1px solid var(--card-line); background: var(--paper); color: var(--ink-soft);
+    border-radius: 20px; padding: 6px 12px; font-size: 12px; font-weight: 600; cursor: pointer;
+  }
+  .chat-chip:hover{ border-color: var(--turf); color: var(--ink); }
+  .chat-input-row{ display: flex; gap: 8px; margin-top: 12px; }
+  .chat-input-row input{
+    flex: 1; min-width: 0; border: 1px solid var(--line); background: var(--paper); color: var(--ink);
+    border-radius: 20px; padding: 10px 16px; font-size: 14px;
+  }
+  .chat-input-row input:focus{ border-color: var(--turf); }
+  .chat-send-btn{
+    appearance: none; border: none; cursor: pointer; flex-shrink: 0;
+    width: 40px; height: 40px; border-radius: 50%; background: var(--turf); color: #fff; font-size: 16px;
+  }
+  .chat-send-btn:hover{ filter: brightness(1.06); }
   .hero-icon{ border-radius: 30px; box-shadow: 0 12px 28px rgba(30,15,0,0.4); margin-bottom: 16px; }
   .hero-title{ font-size: 27px; font-weight: 800; letter-spacing: -0.01em; text-shadow: 0 1px 3px rgba(0,0,0,0.3); }
   .hero-tag{
@@ -316,6 +352,7 @@
   .bat-row-sub span:first-child{ text-transform:capitalize; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .bat-row-sub span:last-child{ flex-shrink:0; }
 
+  .fireworks-canvas{ position:fixed; inset:0; width:100%; height:100%; pointer-events:none; z-index:50; }
   .result-banner{ background:var(--turf); color:#fff; border-radius:10px; padding:24px 20px; text-align:center; }
   .result-banner .rb-trophy{ font-size:34px; line-height:1; margin-bottom:8px; }
   .result-banner .rb-eyebrow{ font-size:11px; font-weight:700; letter-spacing:0.1em; text-transform:uppercase; opacity:0.85; margin-bottom:6px; }
@@ -812,9 +849,86 @@ function scorecardHtml(inning, label){
   `;
 }
 
+let lastFireworksMatchId = null;
 function render(){
   document.documentElement.setAttribute("data-app-screen", state.screen);
   document.getElementById("app").innerHTML = screenHtml();
+  if(state.screen==="result" && state.matchId && state.matchId!==lastFireworksMatchId){
+    lastFireworksMatchId = state.matchId;
+    if(!window.matchMedia("(prefers-reduced-motion: reduce)").matches){
+      requestAnimationFrame(playFireworks);
+    }
+  }
+}
+function playFireworks(){
+  const canvas = document.getElementById("fireworksCanvas");
+  if(!canvas) return;
+  const ctx = canvas.getContext("2d");
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = canvas.clientWidth * dpr;
+  canvas.height = canvas.clientHeight * dpr;
+
+  const COLORS = ["#2f6b4f", "#5aab7c", "#b23a2e", "#dba53f", "#f6f3ea"];
+  let particles = [];
+  function burst(x, y){
+    const count = 34;
+    for(let i=0; i<count; i++){
+      const angle = (Math.PI*2*i)/count + Math.random()*0.3;
+      const speed = (2 + Math.random()*3) * dpr;
+      particles.push({
+        x, y,
+        vx: Math.cos(angle)*speed,
+        vy: Math.sin(angle)*speed,
+        color: COLORS[Math.floor(Math.random()*COLORS.length)],
+        alpha: 1,
+        size: (2 + Math.random()*2) * dpr
+      });
+    }
+  }
+
+  const burstCount = 6;
+  const bursts = [];
+  for(let i=0; i<burstCount; i++){
+    bursts.push({
+      time: i * 380,
+      x: (0.2 + Math.random()*0.6) * canvas.width,
+      y: (0.16 + Math.random()*0.28) * canvas.height
+    });
+  }
+
+  const start = performance.now();
+  let bIdx = 0;
+  function frame(now){
+    if(!document.getElementById("fireworksCanvas")) return;
+    const elapsed = now - start;
+    while(bIdx < bursts.length && elapsed >= bursts[bIdx].time){
+      burst(bursts[bIdx].x, bursts[bIdx].y);
+      bIdx++;
+    }
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    particles.forEach(p=>{
+      p.x += p.vx;
+      p.y += p.vy;
+      p.vy += 0.05 * dpr;
+      p.alpha -= 0.012;
+    });
+    particles = particles.filter(p=>p.alpha>0);
+    particles.forEach(p=>{
+      ctx.globalAlpha = Math.max(p.alpha, 0);
+      ctx.fillStyle = p.color;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.size, 0, Math.PI*2);
+      ctx.fill();
+    });
+    ctx.globalAlpha = 1;
+
+    if(elapsed < 3600 || particles.length>0){
+      requestAnimationFrame(frame);
+    } else {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }
+  }
+  requestAnimationFrame(frame);
 }
 
 function screenHtml(){
@@ -828,6 +942,7 @@ function screenHtml(){
   if(state.screen==="history-detail") return historyDetailScreen();
   if(state.screen==="menu") return menuScreen();
   if(state.screen==="info") return infoScreen();
+  if(state.screen==="chat") return chatScreen();
   return welcomeScreen();
 }
 
@@ -859,6 +974,7 @@ function menuScreen(){
         <button class="menu-item" onclick="goToInfo('about')"><span class="menu-ico">ℹ️</span><span>About</span><span class="menu-arrow">→</span></button>
         <button class="menu-item" onclick="goToInfo('howto')"><span class="menu-ico">📖</span><span>Tutorial</span><span class="menu-arrow">→</span></button>
         <button class="menu-item" onclick="goToInfo('rules')"><span class="menu-ico">🏏</span><span>Rules &amp; Regulations</span><span class="menu-arrow">→</span></button>
+        <button class="menu-item" onclick="goToChat()"><span class="menu-ico">💬</span><span>Ask about cricket</span><span class="menu-arrow">→</span></button>
         <button class="menu-item" onclick="goToInfo('privacy')"><span class="menu-ico">🔒</span><span>Privacy</span><span class="menu-arrow">→</span></button>
         <button class="menu-item" onclick="goToInfo('contact')"><span class="menu-ico">📞</span><span>Contact &amp; Support</span><span class="menu-arrow">→</span></button>
       </div>
@@ -961,6 +1077,106 @@ function infoScreen(){
   `;
 }
 
+const CRICKET_FAQ = [
+  { kw: ["lbw", "leg before wicket"], a: "LBW (leg before wicket): the batsman is out if the ball would have hit the stumps, but struck their leg or body first instead of the bat — provided it didn't pitch outside leg stump and a few other conditions the umpire judges." },
+  { kw: ["how many players", "team size", "players in a team", "players in cricket"], a: "A full cricket side has 11 players. Gully/street cricket is often played with fewer, by informal agreement." },
+  { kw: ["wide", "what is a wide"], a: "A wide is a delivery bowled too far from the batsman for them to reasonably play a shot at it. It adds 1 run to the batting team and doesn't count as a legal ball." },
+  { kw: ["no ball", "noball", "no-ball"], a: "A no-ball is an illegal delivery — most commonly the bowler overstepping the crease. It adds 1 run and doesn't count as a legal ball; in some formats the batsman also gets a free hit on the next delivery." },
+  { kw: ["bye", "leg bye"], a: "A bye is a run scored when the ball passes the batsman untouched (usually past the keeper). A leg bye is when it deflects off the batsman's body, not the bat. Both add runs to the team total, not to the batsman personally." },
+  { kw: ["boundary", "four", "six", "runs for a"], a: "A boundary hit that touches the ground before crossing the rope scores 4 runs. If it clears the boundary without bouncing, it's 6 runs." },
+  { kw: ["over", "balls in an over", "how many balls"], a: "An over is 6 legal deliveries bowled by one bowler from one end. A different bowler then takes over from the other end for the next over." },
+  { kw: ["out", "dismissed", "dismissal", "ways to get out"], a: "The main ways to get out: bowled, caught, run out, stumped, LBW, and hit wicket. There are a few rarer dismissals too, like obstructing the field." },
+  { kw: ["duck"], a: "A \"duck\" means a batsman got out for 0 runs. A \"golden duck\" is getting out on the very first ball you face." },
+  { kw: ["maiden"], a: "A maiden over is one in which the bowler concedes zero runs (no runs off the bat, and no extras) across all 6 legal deliveries." },
+  { kw: ["hat-trick", "hat trick"], a: "A hat-trick is when a bowler takes 3 wickets on 3 consecutive deliveries — they don't have to be in the same over." },
+  { kw: ["difference between test", "odi", "t20", "formats of cricket"], a: "Test cricket is played over up to 5 days with unlimited overs per innings. ODIs (One Day Internationals) are limited to 50 overs a side. T20 is the shortest, at 20 overs a side." },
+  { kw: ["declaration", "declare"], a: "A declaration (Test cricket only) is when the batting captain voluntarily ends their own innings before being all out or running out of overs, usually to leave more time to bowl the opposition out." },
+  { kw: ["follow-on", "follow on"], a: "The follow-on (Test cricket) lets the team that batted first force the other side to bat again immediately, if that side trailed by a large enough margin in the first innings." },
+  { kw: ["drs", "review"], a: "DRS (Decision Review System) lets players challenge an umpire's on-field decision, using replays and ball-tracking technology to confirm or overturn it." },
+  { kw: ["powerplay", "power play"], a: "A powerplay is a set of overs (mainly in ODIs/T20s) with fielding restrictions — fewer fielders are allowed outside a marked inner circle, favouring the batting side." },
+  { kw: ["yorker", "googly", "bouncer", "bowling terms"], a: "A yorker is bowled to land right at the batsman's feet. A googly is a leg-spinner's delivery that spins the opposite way to what it looks like. A bouncer is bowled short, rising toward the batsman's upper body/head." },
+  { kw: ["tied", "tie", "scores level"], a: "If both teams finish with the exact same score, the match is a tie. Some limited-overs tournaments use a Super Over or bowl-out to break a tie in the knockout stage — but a tie is a valid, final result on its own in most matches." },
+  { kw: ["strike rate"], a: "Batting strike rate is runs scored per 100 balls faced (runs ÷ balls × 100). Bowling economy rate is runs conceded per over bowled." },
+  { kw: ["captain", "toss"], a: "Before a match, the two captains toss a coin; the winner chooses whether to bat or field first." }
+];
+function matchFaq(question){
+  const q = question.toLowerCase();
+  let best = null, bestScore = 0;
+  CRICKET_FAQ.forEach(item=>{
+    let score = 0;
+    item.kw.forEach(k=>{ if(q.includes(k)) score += k.split(" ").length; });
+    if(score > bestScore){ bestScore = score; best = item; }
+  });
+  return best;
+}
+let chatMessages = [];
+function goToChat(){
+  state._chatReturnScreen = state.screen;
+  state.screen = "chat";
+  save(); render();
+  scrollChatToBottom();
+}
+function closeChat(){
+  state.screen = state._chatReturnScreen || "welcome";
+  save(); render();
+}
+function scrollChatToBottom(){
+  const el = document.getElementById("chatMessages");
+  if(el) el.scrollTop = el.scrollHeight;
+}
+function askChat(text){
+  text = (text || "").trim();
+  if(!text) return;
+  chatMessages.push({ from:"user", text });
+  const match = matchFaq(text);
+  if(match){
+    chatMessages.push({ from:"bot", text: match.a });
+  } else {
+    chatMessages.push({ from:"bot", text: "I don't have that one built in yet — try rephrasing, or search it directly.", googleQuery: text });
+  }
+  render();
+  scrollChatToBottom();
+}
+function sendChatMessage(){
+  const input = document.getElementById("chatInput");
+  if(!input) return;
+  const text = input.value;
+  input.value = "";
+  askChat(text);
+}
+function chatInputKeydown(e){
+  if(e.key === "Enter"){ e.preventDefault(); sendChatMessage(); }
+}
+function chatScreen(){
+  const suggestions = ["What is LBW?", "How many overs in a T20?", "Ways to get out", "What is a wide?"];
+  const bubbles = chatMessages.map(m=>{
+    if(m.from==="user") return `<div class="chat-bubble chat-bubble-user">${esc(m.text)}</div>`;
+    const googleBtn = m.googleQuery ? `<a class="chat-google-btn" href="https://www.google.com/search?q=${encodeURIComponent(m.googleQuery + " cricket rules")}" target="_blank" rel="noopener">🔎 Search on Google</a>` : "";
+    return `<div class="chat-bubble chat-bubble-bot">${esc(m.text)}${googleBtn}</div>`;
+  }).join("");
+  return `
+    <main>
+      <div class="eyebrow">💬 Menu</div>
+      <h1>Ask about cricket</h1>
+      <p class="lede">Common rules, answered instantly. Anything else, I'll hand you off to Google.</p>
+      <div class="card" style="padding:14px;">
+        <div id="chatMessages" class="chat-messages">
+          ${bubbles || `<div class="chat-bubble chat-bubble-bot">Ask me something like "What is LBW?" or tap a suggestion below.</div>`}
+        </div>
+        <div class="chat-suggestions">
+          ${suggestions.map(s=>`<button class="chat-chip" onclick="askChat('${esc(s).replace(/'/g,"\\'")}')">${esc(s)}</button>`).join("")}
+        </div>
+        <div class="chat-input-row">
+          <input id="chatInput" type="text" placeholder="Ask a cricket question…" onkeydown="chatInputKeydown(event)">
+          <button class="chat-send-btn" onclick="sendChatMessage()">➤</button>
+        </div>
+      </div>
+      <button class="btn-ghost" style="width:100%; padding:11px 12px;" onclick="closeChat()">← Back</button>
+    </main>
+    <footer>${copyrightLine()}</footer>
+  `;
+}
+
 function goToSetup(){
   state.screen = "setup";
   save(); render();
@@ -989,6 +1205,7 @@ function welcomeScreen(){
       ` : `
         <button class="btn btn-primary" onclick="goToSetup()">Start scoring →</button>
       `}
+      <button class="btn-chat" onclick="goToChat()">💬 Ask about cricket rules</button>
       ${hasHistory ? `<button class="btn-ghost" style="width:100%; padding:11px 12px;" onclick="openHistory()">📜 Match history</button>` : ""}
     </main>
     <footer>Everything stays on this device.${copyrightLine()}</footer>
@@ -1166,7 +1383,6 @@ function scoringScreen(){
       </div>
       ${pending ? entryFormHtml(inning) : `${crewHtml}${bowlerHtml}${overStrip}${padHtml}`}
     </main>
-    <footer>Simplified rules: wickets are always credited to the batsman on strike; run-outs, no-ball free hits and running byes off a boundary aren't modelled.</footer>
   `;
 }
 
@@ -1219,6 +1435,7 @@ function resultScreen(){
   `;
 
   return `
+    <canvas id="fireworksCanvas" class="fireworks-canvas no-print"></canvas>
     <main>
       ${printHeader}
       <div class="result-banner">
