@@ -160,7 +160,7 @@
     display: flex; align-items: center; justify-content: center;
     background: radial-gradient(circle at 32% 26%, #f7b044 0%, #c96a1f 52%, #5e2e10 100%);
   }
-  .boot-splash img{ border-radius: 30px; box-shadow: 0 12px 28px rgba(30,15,0,0.4); display: block; }
+  .boot-splash img{ border-radius: 50%; object-fit: cover; box-shadow: 0 12px 28px rgba(30,15,0,0.4); display: block; }
   .hero-menu-btn, .hero-bell-btn, .hero-chat-btn{
     position: absolute;
     appearance: none; cursor: pointer;
@@ -174,8 +174,8 @@
     transition: transform .15s ease, background .15s ease;
   }
   .hero-menu-btn{ top: 14px; left: 14px; }
-  .hero-bell-btn{ top: 14px; left: 62px; }
-  .hero-chat-btn{ bottom: 14px; left: 14px; }
+  .hero-bell-btn{ top: 14px; right: 14px; }
+  .hero-chat-btn{ bottom: 14px; right: 14px; }
   .hero-menu-btn svg{ width: 18px; height: 18px; display: block; }
   .hero-menu-btn:hover, .hero-bell-btn:hover, .hero-chat-btn:hover{ background: rgba(255,255,255,0.28); }
   .hero-menu-btn:active, .hero-bell-btn:active, .hero-chat-btn:active{ transform: scale(0.92); }
