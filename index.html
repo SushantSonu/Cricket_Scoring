@@ -105,6 +105,7 @@
     text-overflow:ellipsis;
   }
   .innings-pill{
+    appearance:none; border:none; cursor:pointer; font-family:inherit;
     flex-shrink:0;
     font-size:10.5px;
     font-weight:700;
@@ -114,7 +115,9 @@
     background:var(--turf-tint);
     border-radius:20px;
     padding:4px 10px;
+    white-space:nowrap;
   }
+  .innings-pill:hover{ filter:brightness(0.95); }
   .icon-btn{
     flex-shrink:0; appearance:none; border:1px solid var(--card-line); background:transparent;
     color:var(--ink-soft); border-radius:8px; width:32px; height:32px; font-size:15px;
@@ -169,6 +172,10 @@
   .pitch-list{ display: flex; flex-direction: column; gap: 13px; margin-bottom: 6px; }
   .pitch-item{ display: flex; align-items: flex-start; gap: 12px; font-size: 13.5px; color: var(--ink-soft); line-height: 1.5; }
   .pitch-ico{ font-size: 18px; flex-shrink: 0; line-height: 1.3; }
+  .paused-note{
+    background: var(--bail-tint); color: var(--bail); border-radius: 8px;
+    padding: 10px 14px; font-size: 13px; font-weight: 700; text-align: center;
+  }
 
   main{ flex:1; padding:18px; display:flex; flex-direction:column; gap:16px; }
 
@@ -394,7 +401,8 @@ function freshState(){
     matchId: null,
     matchDate: null,
     lastOpenDate: null,
-    infoKind: null
+    infoKind: null,
+    homeReturnScreen: null
   };
 }
 function emptyBatsman(){ return { name:null, runs:0, balls:0, out:false, ones:0, twos:0, threes:0, fours:0, sixes:0 }; }
@@ -492,7 +500,39 @@ function finishAction(){
   const inning = currentInning();
   if(inning.ended){
     state.screen = state.inningsIndex===0 ? "break" : "result";
-    if(state.screen==="result") archiveMatch();
+    if(state.screen==="result"){
+      archiveMatch();
+      state.homeReturnScreen = null;
+    }
+  }
+  save(); render();
+}
+function goHome(){
+  state.homeReturnScreen = state.screen;
+  state.screen = "welcome";
+  save(); render();
+}
+function resumeMatch(){
+  state.screen = state.homeReturnScreen || "scoring";
+  save(); render();
+}
+function editOvers(){
+  const inning = currentInning();
+  const raw = prompt(`Overs per innings (currently ${state.oversLimit}):`, state.oversLimit);
+  if(raw === null) return;
+  const n = parseInt(raw, 10);
+  if(!n || n < 1){ alert("Enter a valid number of overs (1 or more)."); return; }
+  pushUndo();
+  state.oversLimit = n;
+  if(inning && !inning.ended){
+    checkInningsEnd(inning);
+    if(inning.ended){
+      state.screen = state.inningsIndex===0 ? "break" : "result";
+      if(state.screen==="result"){
+        archiveMatch();
+        state.homeReturnScreen = null;
+      }
+    }
   }
   save(); render();
 }
@@ -817,7 +857,8 @@ function menuScreen(){
       <h1>Cric Score</h1>
       <div class="menu-list">
         <button class="menu-item" onclick="goToInfo('about')"><span class="menu-ico">ℹ️</span><span>About</span><span class="menu-arrow">→</span></button>
-        <button class="menu-item" onclick="goToInfo('howto')"><span class="menu-ico">📖</span><span>How to use</span><span class="menu-arrow">→</span></button>
+        <button class="menu-item" onclick="goToInfo('howto')"><span class="menu-ico">📖</span><span>Tutorial</span><span class="menu-arrow">→</span></button>
+        <button class="menu-item" onclick="goToInfo('rules')"><span class="menu-ico">🏏</span><span>Rules &amp; Regulations</span><span class="menu-arrow">→</span></button>
         <button class="menu-item" onclick="goToInfo('privacy')"><span class="menu-ico">🔒</span><span>Privacy</span><span class="menu-arrow">→</span></button>
         <button class="menu-item" onclick="goToInfo('contact')"><span class="menu-ico">📞</span><span>Contact &amp; Support</span><span class="menu-arrow">→</span></button>
       </div>
@@ -840,18 +881,51 @@ const INFO_CONTENT = {
     `
   },
   howto: {
-    title: "How to use",
+    title: "Tutorial",
     icon: "📖",
     body: `
+      <p><b>Setting up a match</b></p>
       <ol>
-        <li>Tap <b>Start scoring</b>, enter both team names and the number of overs, then pick who bats first.</li>
-        <li>Enter the opening batsmen and bowler — only once play actually begins.</li>
-        <li>Score each ball with the run buttons, or tag Wide, No ball, Bye, Leg bye, or Wicket.</li>
-        <li>After a wicket, or once an over ends, you'll be asked for the next batsman or bowler before you can keep scoring.</li>
-        <li>When an innings finishes, set up the next one the same way.</li>
-        <li>At the end of the match, review the scorecard, confirm the Man of the Match, and export to PDF or save it to history.</li>
-        <li>Mid-match, tap the 🔗 icon to continue scoring on a different device.</li>
+        <li>From the home screen, tap <b>Start scoring</b>.</li>
+        <li>Enter both team names and the number of overs, then tap <b>Set overs &amp; continue</b>.</li>
+        <li>Pick which team bats first.</li>
       </ol>
+      <p><b>Scoring an innings</b></p>
+      <ol>
+        <li>Enter the two opening batsmen and the opening bowler — this is the only time you name players, and it happens right when play starts, not before.</li>
+        <li>Tap a run button (0–6) for each legal delivery, or tag <b>Wide</b>, <b>No ball</b>, <b>Bye</b>, <b>Leg bye</b>, or <b>Wicket</b> as needed.</li>
+        <li>After a wicket, you'll be asked for the incoming batsman's name before you can keep scoring. After every completed over, you'll be asked for the next bowler.</li>
+        <li>Use <b>Undo</b> to reverse the last ball if you tap the wrong thing, or <b>End innings</b> to close it early.</li>
+        <li>Tap the overs count in the top bar any time to change it — useful if a match needs to be shortened for time. If you reduce it below what's already been bowled, the innings ends immediately.</li>
+        <li>Tap the 🏠 icon to return to the home screen without losing your place — a <b>Resume match</b> button will be waiting for you there.</li>
+      </ol>
+      <p><b>Second innings &amp; finishing up</b></p>
+      <ol>
+        <li>Once the first innings ends, review its scorecard and tap <b>Start innings 2</b>. You'll enter new openers and a bowler the same way.</li>
+        <li>The chase shows your target, runs needed, and required run rate. The match ends the moment the target is reached or overs run out.</li>
+        <li>At the end, review the full scorecard, confirm or change the suggested Man of the Match, then <b>Export PDF</b> or head back to the home screen — the match is saved to your history either way.</li>
+      </ol>
+      <p><b>Match history</b></p>
+      <p>Every finished match is saved automatically. Open it from the home screen or the menu to view or export any past scorecard, or delete ones you don't need anymore.</p>
+    `
+  },
+  rules: {
+    title: "Cricket Rules & Regulations",
+    icon: "🏏",
+    body: `
+      <p><b>The basics</b></p>
+      <p>Two teams take turns batting and bowling. The batting side tries to score as many runs as possible; the bowling side tries to dismiss batsmen and limit runs. Whichever side scores more runs when the match ends wins.</p>
+      <p><b>Teams &amp; innings</b></p>
+      <p>A full side has 11 players (gully cricket is often played with fewer). In limited-overs cricket, each innings is a fixed number of overs; in Test cricket, innings are unlimited by overs. Two batsmen are always at the crease together, while the bowling side sends down one bowler at a time, bowling six legal deliveries — an over — before a different bowler takes over from the other end.</p>
+      <p><b>Scoring runs</b></p>
+      <p>Batsmen score by running between the two wickets after hitting the ball, or automatically via a boundary: <b>4 runs</b> if the ball reaches the boundary after touching the ground, <b>6 runs</b> if it clears the boundary without bouncing.</p>
+      <p><b>Extras</b></p>
+      <p>Runs can also come from the bowler's mistakes rather than the bat: a <b>wide</b> (delivery out of the batsman's reach), a <b>no-ball</b> (an illegal delivery, e.g. overstepping the crease), a <b>bye</b> (the ball passes the batsman untouched), or a <b>leg bye</b> (it deflects off the batsman's body, not the bat).</p>
+      <p><b>Ways to get out</b></p>
+      <p>The most common dismissals are <b>bowled</b> (the ball hits the stumps), <b>caught</b> (a fielder catches the ball before it bounces), <b>run out</b> (a fielder breaks the wicket before the batsman reaches it), <b>stumped</b> (the wicketkeeper breaks the stumps while the batsman is out of their crease), <b>LBW</b> — leg before wicket (the ball would have hit the stumps but struck the batsman's body first), and <b>hit wicket</b> (the batsman dislodges their own stumps).</p>
+      <p><b>End of an innings</b></p>
+      <p>An innings ends when all its overs are bowled, ten of the eleven batsmen are out, the batting side declares (Test cricket only), or — when chasing a target — the target is reached.</p>
+      <p style="color:var(--ink-soft); font-size:12.5px;">This is a general overview of the sport's laws. Cric Score itself uses a simplified scoring model suited to informal gully cricket — see the note at the bottom of the scoring screen for the specific simplifications.</p>
     `
   },
   privacy: {
@@ -894,6 +968,7 @@ function goToSetup(){
 
 function welcomeScreen(){
   const hasHistory = loadHistory().length>0;
+  const hasActiveMatch = !!state.homeReturnScreen;
   return `
     <div class="hero">
       <button class="hero-menu-btn" onclick="openMenu()" title="Menu" aria-label="Menu">☰</button>
@@ -907,7 +982,13 @@ function welcomeScreen(){
         <div class="pitch-item"><span class="pitch-ico">✍️</span><span>Batsmen and bowler are named only when they actually take the field</span></div>
         <div class="pitch-item"><span class="pitch-ico">🏅</span><span>Full scorecard, Man of the Match and match history, every game</span></div>
       </div>
-      <button class="btn btn-primary" onclick="goToSetup()">Start scoring →</button>
+      ${hasActiveMatch ? `
+        <div class="paused-note">⏸ ${esc(state.teamAName)} vs ${esc(state.teamBName)} is paused</div>
+        <button class="btn btn-primary" onclick="resumeMatch()">▶ Resume match</button>
+        <button class="btn btn-export" onclick="newMatch()">Start a new match</button>
+      ` : `
+        <button class="btn btn-primary" onclick="goToSetup()">Start scoring →</button>
+      `}
       ${hasHistory ? `<button class="btn-ghost" style="width:100%; padding:11px 12px;" onclick="openHistory()">📜 Match history</button>` : ""}
     </main>
     <footer>Everything stays on this device.${copyrightLine()}</footer>
@@ -953,6 +1034,7 @@ function tossScreen(){
       <p class="lede">${esc(state.teamAName)} vs ${esc(state.teamBName)} · ${state.oversLimit} over${state.oversLimit===1?"":"s"} a side.</p>
       <button class="btn-choice" onclick="chooseBattingFirst('A')"><span>${esc(state.teamAName)}</span><span class="arrow">bats first →</span></button>
       <button class="btn-choice" onclick="chooseBattingFirst('B')"><span>${esc(state.teamBName)}</span><span class="arrow">bats first →</span></button>
+      <button class="btn-ghost" style="width:100%; padding:11px 12px;" onclick="goHome()">🏠 Home</button>
     </main>
     <footer>You can enter the openers and the first bowler right after this.</footer>
   `;
@@ -1067,8 +1149,9 @@ function scoringScreen(){
   return `
     <div class="topbar">
       <div class="topbar-row">
+        <button class="icon-btn" onclick="goHome()" title="Home" aria-label="Home">🏠</button>
         <div class="match-title">${esc(state.teamAName)} vs ${esc(state.teamBName)}</div>
-        <div class="innings-pill">Innings ${state.inningsIndex+1} of 2</div>
+        <button class="innings-pill" onclick="editOvers()" title="Change overs">${state.oversLimit} OV · INNINGS ${state.inningsIndex+1} OF 2 ✎</button>
         <button class="icon-btn" onclick="shareTransferLink()" title="Continue on another device" aria-label="Continue on another device">🔗</button>
       </div>
     </div>
@@ -1097,7 +1180,9 @@ function breakScreen(){
       <p class="lede">${esc(teamName(inning.bowlingKey))} need <b>${target}</b> to win off ${state.oversLimit} over${state.oversLimit===1?"":"s"}.</p>
       <div class="card">${scorecardHtml(inning, "Innings 1")}</div>
       <button class="btn btn-primary" onclick="startInnings2()">Start innings 2</button>
+      <button class="btn-ghost" style="width:100%; padding:11px 12px;" onclick="editOvers()">✎ Change overs (currently ${state.oversLimit})</button>
       <button class="btn-ghost" style="width:100%; padding:11px 12px;" onclick="shareTransferLink()">🔗 Continue on another device</button>
+      <button class="btn-ghost" style="width:100%; padding:11px 12px;" onclick="goHome()">🏠 Home</button>
     </main>
     <footer>You'll enter the new openers and the opening bowler next.</footer>
   `;
