@@ -29,6 +29,12 @@
     --ball-tint:#f8e6e2;
     --bail:#a9701c;
     --bail-tint:#f5ead4;
+    --info-blue:#2f5f8a;
+    --info-blue-tint:#e7eef5;
+    --info-purple:#6b4a94;
+    --info-purple-tint:#efe7f5;
+    --info-teal:#1f7a6c;
+    --info-teal-tint:#e2f2ee;
     --shadow:rgba(28,37,33,0.10);
     --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Menlo, Consolas, monospace;
@@ -48,6 +54,12 @@
       --ball-tint:#2e1c19;
       --bail:#dba53f;
       --bail-tint:#2c2313;
+      --info-blue:#7bb0e8;
+      --info-blue-tint:#182533;
+      --info-purple:#bd9bde;
+      --info-purple-tint:#241c2c;
+      --info-teal:#5fd0b8;
+      --info-teal-tint:#132821;
       --shadow:rgba(0,0,0,0.45);
     }
   }
@@ -55,11 +67,15 @@
     --ink:#eef0e8; --ink-soft:#a6b0a8; --paper:#10140f; --card:#171d17; --card-line:#293025;
     --line:#2a3226; --turf:#5aab7c; --turf-strong:#7fcb9d; --turf-tint:#1a2b21;
     --ball:#e2685a; --ball-tint:#2e1c19; --bail:#dba53f; --bail-tint:#2c2313; --shadow:rgba(0,0,0,0.45);
+    --info-blue:#7bb0e8; --info-blue-tint:#182533; --info-purple:#bd9bde; --info-purple-tint:#241c2c;
+    --info-teal:#5fd0b8; --info-teal-tint:#132821;
   }
   :root[data-theme="light"]{
     --ink:#1c2521; --ink-soft:#5b655e; --paper:#f6f3ea; --card:#ffffff; --card-line:#e4ddc9;
     --line:#ddd5c0; --turf:#2f6b4f; --turf-strong:#1f4d38; --turf-tint:#e7f0e8;
     --ball:#b23a2e; --ball-tint:#f8e6e2; --bail:#a9701c; --bail-tint:#f5ead4; --shadow:rgba(28,37,33,0.10);
+    --info-blue:#2f5f8a; --info-blue-tint:#e7eef5; --info-purple:#6b4a94; --info-purple-tint:#efe7f5;
+    --info-teal:#1f7a6c; --info-teal-tint:#e2f2ee;
   }
 
   *{ box-sizing:border-box; }
@@ -74,6 +90,7 @@
     min-height:100vh;
   }
   .shell{
+    position:relative;
     max-width:460px;
     margin:0 auto;
     min-height:100vh;
@@ -118,6 +135,8 @@
     white-space:nowrap;
   }
   .innings-pill:hover{ filter:brightness(0.95); }
+  .innings-pill.locked{ cursor:default; color:var(--ink-soft); background:var(--card-line); }
+  .innings-pill.locked:hover{ filter:none; }
   .icon-btn{
     flex-shrink:0; appearance:none; border:1px solid var(--card-line); background:transparent;
     color:var(--ink-soft); border-radius:8px; width:32px; height:32px; font-size:15px;
@@ -143,13 +162,30 @@
   .menu-list{ display: flex; flex-direction: column; gap: 10px; }
   .menu-item{
     display: flex; align-items: center; gap: 12px;
-    background: var(--card); border: 1px solid var(--card-line); border-radius: 10px;
-    padding: 14px 16px; font-size: 14.5px; font-weight: 700; color: var(--ink);
+    background: var(--card); border: 1.5px solid var(--card-line); border-radius: 10px;
+    padding: 12px 16px; font-size: 14.5px; font-weight: 700; color: var(--ink);
     cursor: pointer; text-align: left; width: 100%;
   }
-  .menu-item:hover{ border-color: var(--turf); }
-  .menu-item .menu-ico{ font-size: 18px; flex-shrink: 0; }
-  .menu-item .menu-arrow{ margin-left: auto; color: var(--ink-soft); font-weight: 400; }
+  .menu-item:hover{ border-color: var(--accent, var(--turf)); }
+  .menu-item .menu-ico-chip{
+    width: 34px; height: 34px; border-radius: 10px; flex-shrink: 0;
+    background: var(--accent-tint, var(--turf-tint));
+    display: flex; align-items: center; justify-content: center; font-size: 17px;
+  }
+  .menu-item .menu-arrow{ margin-left: auto; color: var(--accent, var(--ink-soft)); font-weight: 700; }
+  .btn-back{
+    width: 100%; padding: 11px 12px;
+    background: var(--ink); color: var(--paper); border: none;
+    font-size: 14px; font-weight: 700;
+  }
+  .btn-back:hover{ filter: brightness(1.15); }
+  .lang-toggle{ display: flex; gap: 8px; margin: -6px 0 14px; }
+  .lang-btn{
+    appearance: none; cursor: pointer; flex: 1;
+    border: 1.5px solid var(--card-line); background: var(--card); color: var(--ink-soft);
+    border-radius: 20px; padding: 7px 12px; font-size: 13px; font-weight: 700;
+  }
+  .lang-btn.active{ background: var(--turf); color: #fff; border-color: var(--turf); }
   .info-body{ font-size: 14px; line-height: 1.7; color: var(--ink); }
   .info-body p{ margin: 0 0 14px; }
   .info-body ol, .info-body ul{ margin: 0 0 14px; padding-left: 20px; }
@@ -163,12 +199,15 @@
   .contact-row .contact-ico{ font-size: 18px; flex-shrink: 0; }
   .contact-row a{ color: var(--turf-strong); text-decoration: none; }
   .contact-row a:hover{ text-decoration: underline; }
-  .btn-chat{
-    width: 100%; padding: 11px 12px;
-    background: var(--turf-tint); color: var(--turf-strong); border: 1px solid transparent;
-    font-size: 15px; font-weight: 700;
+  .chat-fab{
+    position: absolute; bottom: 22px; right: 22px;
+    width: 56px; height: 56px; border-radius: 50%;
+    appearance: none; border: none; cursor: pointer;
+    background: var(--turf); color: #fff; font-size: 24px;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 8px 20px rgba(0,0,0,0.3); z-index: 30;
   }
-  .btn-chat:hover{ filter: brightness(0.97); }
+  .chat-fab:hover{ filter: brightness(1.06); }
   .chat-messages{
     display: flex; flex-direction: column; gap: 10px;
     max-height: 48vh; overflow-y: auto; padding: 2px 2px 4px;
@@ -439,7 +478,8 @@ function freshState(){
     matchDate: null,
     lastOpenDate: null,
     infoKind: null,
-    homeReturnScreen: null
+    homeReturnScreen: null,
+    contentLang: "en"
   };
 }
 function emptyBatsman(){ return { name:null, runs:0, balls:0, out:false, ones:0, twos:0, threes:0, fours:0, sixes:0 }; }
@@ -554,6 +594,10 @@ function resumeMatch(){
   save(); render();
 }
 function editOvers(){
+  if(state.inningsIndex===1){
+    alert("Overs can't be changed once the 2nd innings has started — this app doesn't use DLS-style target recalculation.");
+    return;
+  }
   const inning = currentInning();
   const raw = prompt(`Overs per innings (currently ${state.oversLimit}):`, state.oversLimit);
   if(raw === null) return;
@@ -971,14 +1015,14 @@ function menuScreen(){
       <div class="eyebrow">Menu</div>
       <h1>Cric Score</h1>
       <div class="menu-list">
-        <button class="menu-item" onclick="goToInfo('about')"><span class="menu-ico">ℹ️</span><span>About</span><span class="menu-arrow">→</span></button>
-        <button class="menu-item" onclick="goToInfo('howto')"><span class="menu-ico">📖</span><span>Tutorial</span><span class="menu-arrow">→</span></button>
-        <button class="menu-item" onclick="goToInfo('rules')"><span class="menu-ico">🏏</span><span>Rules &amp; Regulations</span><span class="menu-arrow">→</span></button>
-        <button class="menu-item" onclick="goToChat()"><span class="menu-ico">💬</span><span>Ask about cricket</span><span class="menu-arrow">→</span></button>
-        <button class="menu-item" onclick="goToInfo('privacy')"><span class="menu-ico">🔒</span><span>Privacy</span><span class="menu-arrow">→</span></button>
-        <button class="menu-item" onclick="goToInfo('contact')"><span class="menu-ico">📞</span><span>Contact &amp; Support</span><span class="menu-arrow">→</span></button>
+        <button class="menu-item" style="--accent:var(--turf); --accent-tint:var(--turf-tint);" onclick="goToInfo('about')"><span class="menu-ico-chip">ℹ️</span><span>About</span><span class="menu-arrow">→</span></button>
+        <button class="menu-item" style="--accent:var(--info-blue); --accent-tint:var(--info-blue-tint);" onclick="goToInfo('howto')"><span class="menu-ico-chip">📖</span><span>Tutorial</span><span class="menu-arrow">→</span></button>
+        <button class="menu-item" style="--accent:var(--bail); --accent-tint:var(--bail-tint);" onclick="goToInfo('rules')"><span class="menu-ico-chip">🏏</span><span>Rules &amp; Regulations</span><span class="menu-arrow">→</span></button>
+        <button class="menu-item" style="--accent:var(--info-purple); --accent-tint:var(--info-purple-tint);" onclick="goToChat()"><span class="menu-ico-chip">💬</span><span>Ask about cricket</span><span class="menu-arrow">→</span></button>
+        <button class="menu-item" style="--accent:var(--info-teal); --accent-tint:var(--info-teal-tint);" onclick="goToInfo('privacy')"><span class="menu-ico-chip">🔒</span><span>Privacy</span><span class="menu-arrow">→</span></button>
+        <button class="menu-item" style="--accent:var(--ball); --accent-tint:var(--ball-tint);" onclick="goToInfo('contact')"><span class="menu-ico-chip">📞</span><span>Contact &amp; Support</span><span class="menu-arrow">→</span></button>
       </div>
-      <button class="btn-ghost" style="width:100%; padding:11px 12px; margin-top:8px;" onclick="closeMenu()">← Back</button>
+      <button class="btn-back" style="margin-top:8px;" onclick="closeMenu()">← Back</button>
     </main>
     <footer>${copyrightLine()}</footer>
   `;
@@ -988,6 +1032,7 @@ const INFO_CONTENT = {
   about: {
     title: "About Cric Score",
     icon: "ℹ️",
+    tintVar: "--turf-tint",
     body: `
       <p>Cric Score is a fast, no-fuss scorer for gully (street) cricket. Enter two team names and an overs count to start a match — there's no squad list to fill in beforehand.</p>
       <p>Batsmen and the bowler are only named the moment they actually step up to bat or bowl, so setup takes seconds, not minutes.</p>
@@ -999,6 +1044,7 @@ const INFO_CONTENT = {
   howto: {
     title: "Tutorial",
     icon: "📖",
+    tintVar: "--info-blue-tint",
     body: `
       <p><b>Setting up a match</b></p>
       <ol>
@@ -1012,7 +1058,7 @@ const INFO_CONTENT = {
         <li>Tap a run button (0–6) for each legal delivery, or tag <b>Wide</b>, <b>No ball</b>, <b>Bye</b>, <b>Leg bye</b>, or <b>Wicket</b> as needed.</li>
         <li>After a wicket, you'll be asked for the incoming batsman's name before you can keep scoring. After every completed over, you'll be asked for the next bowler.</li>
         <li>Use <b>Undo</b> to reverse the last ball if you tap the wrong thing, or <b>End innings</b> to close it early.</li>
-        <li>Tap the overs count in the top bar any time to change it — useful if a match needs to be shortened for time. If you reduce it below what's already been bowled, the innings ends immediately.</li>
+        <li>In the 1st innings only, tap the overs count in the top bar any time to change it — useful if a match needs to be shortened for time. If you reduce it below what's already been bowled, the innings ends immediately. It locks once the 2nd innings starts, since this app doesn't recalculate targets (no DLS method).</li>
         <li>Tap the 🏠 icon to return to the home screen without losing your place — a <b>Resume match</b> button will be waiting for you there.</li>
       </ol>
       <p><b>Second innings &amp; finishing up</b></p>
@@ -1023,11 +1069,37 @@ const INFO_CONTENT = {
       </ol>
       <p><b>Match history</b></p>
       <p>Every finished match is saved automatically. Open it from the home screen or the menu to view or export any past scorecard, or delete ones you don't need anymore.</p>
+    `,
+    bodyHi: `
+      <p><b>मैच सेटअप करना</b></p>
+      <ol>
+        <li>होम स्क्रीन से <b>Start scoring</b> पर टैप करें।</li>
+        <li>दोनों टीमों के नाम और ओवरों की संख्या डालें, फिर <b>Set overs &amp; continue</b> पर टैप करें।</li>
+        <li>तय करें कि कौन सी टीम पहले बैटिंग करेगी।</li>
+      </ol>
+      <p><b>इनिंग स्कोर करना</b></p>
+      <ol>
+        <li>दो ओपनिंग बैट्समैन और बॉलर के नाम डालें — यह इकलौता समय है जब आपको खिलाड़ियों के नाम डालने होते हैं, और यह खेल शुरू होने पर ही होता है, पहले से नहीं।</li>
+        <li>हर लीगल बॉल के लिए रन बटन (0–6) दबाएं, या ज़रूरत पड़ने पर <b>Wide</b>, <b>No ball</b>, <b>Bye</b>, <b>Leg bye</b>, या <b>Wicket</b> टैग करें।</li>
+        <li>विकेट गिरने के बाद, आगे स्कोर करने से पहले नए बैट्समैन का नाम पूछा जाएगा। हर ओवर पूरा होने पर, अगले बॉलर का नाम पूछा जाएगा।</li>
+        <li>गलत बटन दबने पर आखिरी बॉल पलटने के लिए <b>Undo</b> दबाएं, या इनिंग जल्दी बंद करने के लिए <b>End innings</b> दबाएं।</li>
+        <li>सिर्फ पहली इनिंग में, टॉप बार में ओवरों की संख्या पर टैप करके उसे बदल सकते हैं — समय कम होने पर मैच छोटा करने के लिए। पहले से फेंकी गई बॉल्स से कम ओवर तय करने पर इनिंग उसी वक़्त खत्म हो जाती है। दूसरी इनिंग शुरू होने के बाद यह लॉक हो जाता है, क्योंकि यह ऐप टारगेट को फिर से नहीं जोड़ता (कोई DLS मेथड नहीं है)।</li>
+        <li>अपनी जगह खोए बिना होम स्क्रीन पर जाने के लिए 🏠 आइकॉन दबाएं — वहां <b>Resume match</b> बटन आपका इंतज़ार करेगा।</li>
+      </ol>
+      <p><b>दूसरी इनिंग और मैच खत्म करना</b></p>
+      <ol>
+        <li>पहली इनिंग खत्म होने पर, उसका स्कोरकार्ड देखें और <b>Start innings 2</b> दबाएं। नए ओपनर और बॉलर उसी तरह डालें।</li>
+        <li>चेज़ के दौरान टारगेट, ज़रूरी रन और ज़रूरी रन रेट दिखाई जाती है। टारगेट पूरा होते ही या ओवर खत्म होते ही मैच खत्म हो जाता है।</li>
+        <li>आखिर में, पूरा स्कोरकार्ड देखें, सुझाए गए Man of the Match की पुष्टि करें या बदलें, फिर <b>Export PDF</b> करें या होम स्क्रीन पर जाएं — मैच हर हाल में आपकी हिस्ट्री में सेव हो जाता है।</li>
+      </ol>
+      <p><b>मैच हिस्ट्री</b></p>
+      <p>हर खत्म हुआ मैच अपने आप सेव हो जाता है। किसी भी पुराने स्कोरकार्ड को देखने, एक्सपोर्ट करने या हटाने के लिए इसे होम स्क्रीन या मेन्यू से खोलें।</p>
     `
   },
   rules: {
     title: "Cricket Rules & Regulations",
     icon: "🏏",
+    tintVar: "--bail-tint",
     body: `
       <p><b>The basics</b></p>
       <p>Two teams take turns batting and bowling. The batting side tries to score as many runs as possible; the bowling side tries to dismiss batsmen and limit runs. Whichever side scores more runs when the match ends wins.</p>
@@ -1041,12 +1113,28 @@ const INFO_CONTENT = {
       <p>The most common dismissals are <b>bowled</b> (the ball hits the stumps), <b>caught</b> (a fielder catches the ball before it bounces), <b>run out</b> (a fielder breaks the wicket before the batsman reaches it), <b>stumped</b> (the wicketkeeper breaks the stumps while the batsman is out of their crease), <b>LBW</b> — leg before wicket (the ball would have hit the stumps but struck the batsman's body first), and <b>hit wicket</b> (the batsman dislodges their own stumps).</p>
       <p><b>End of an innings</b></p>
       <p>An innings ends when all its overs are bowled, ten of the eleven batsmen are out, the batting side declares (Test cricket only), or — when chasing a target — the target is reached.</p>
-      <p style="color:var(--ink-soft); font-size:12.5px;">This is a general overview of the sport's laws. Cric Score itself uses a simplified scoring model suited to informal gully cricket — see the note at the bottom of the scoring screen for the specific simplifications.</p>
+      <p style="color:var(--ink-soft); font-size:12.5px;">This is a general overview of the sport's laws. Cric Score itself uses a simplified scoring model suited to informal gully cricket: wickets are always credited to the batsman on strike, and run-outs, no-ball free hits, and running byes off a boundary aren't modelled.</p>
+    `,
+    bodyHi: `
+      <p><b>बुनियादी बातें</b></p>
+      <p>दो टीमें बारी-बारी से बैटिंग और बॉलिंग करती हैं। बैटिंग टीम जितना हो सके उतने रन बनाने की कोशिश करती है; बॉलिंग टीम बैट्समैन को आउट करने और रन रोकने की कोशिश करती है। मैच खत्म होने पर जिस टीम के ज़्यादा रन होते हैं, वही जीतती है।</p>
+      <p><b>टीमें और इनिंग्स</b></p>
+      <p>एक पूरी टीम में 11 खिलाड़ी होते हैं (गली क्रिकेट अक्सर कम खिलाड़ियों से भी खेला जाता है)। लिमिटेड-ओवर क्रिकेट में हर इनिंग में ओवरों की एक तय संख्या होती है; टेस्ट क्रिकेट में इनिंग ओवरों से सीमित नहीं होती। मैदान पर हमेशा दो बैट्समैन एक साथ होते हैं, जबकि बॉलिंग टीम एक समय पर एक ही बॉलर से गेंदबाज़ी करवाती है, जो छह लीगल बॉल्स — यानी एक ओवर — फेंकता है, फिर दूसरे छोर से एक अलग बॉलर गेंदबाज़ी करता है।</p>
+      <p><b>रन बनाना</b></p>
+      <p>बैट्समैन गेंद खेलकर दोनों विकेटों के बीच दौड़कर रन बनाते हैं, या बाउंड्री से अपने आप रन मिलते हैं: ज़मीन को छूते हुए बाउंड्री पार करने पर <b>4 रन</b>, और बिना उछले बाउंड्री पार करने पर <b>6 रन</b> मिलते हैं।</p>
+      <p><b>एक्स्ट्रा रन</b></p>
+      <p>बॉलर की गलती से भी रन मिल सकते हैं, बैट से नहीं: <b>वाइड</b> (बैट्समैन की पहुंच से बाहर फेंकी गई गेंद), <b>नो-बॉल</b> (गैरकानूनी गेंद, जैसे क्रीज़ से आगे निकलकर फेंकना), <b>बाई</b> (गेंद बैट्समैन को छुए बिना निकल जाना), या <b>लेग बाई</b> (गेंद बैट के बजाय शरीर से टकराकर जाना)।</p>
+      <p><b>आउट होने के तरीके</b></p>
+      <p>सबसे सामान्य तरीके: <b>बोल्ड</b> (गेंद विकेट पर लगना), <b>कैच आउट</b> (फील्डर गेंद ज़मीन छूने से पहले पकड़ लेता है), <b>रन आउट</b> (बैट्समैन के क्रीज़ तक पहुंचने से पहले फील्डर विकेट तोड़ देता है), <b>स्टंप्ड</b> (बैट्समैन क्रीज़ से बाहर होने पर विकेटकीपर स्टंप्स तोड़ देता है), <b>एलबीडब्ल्यू</b> यानी लेग बिफोर विकेट (गेंद बैट से टकराने से पहले शरीर से लगती, और न लगती तो विकेट पर जाती), और <b>हिट विकेट</b> (बैट्समैन खुद अपने स्टंप्स गिरा देता है)।</p>
+      <p><b>इनिंग का खत्म होना</b></p>
+      <p>कोई इनिंग तब खत्म होती है जब उसके सारे ओवर पूरे हो जाएं, ग्यारह में से दस बैट्समैन आउट हो जाएं, बैटिंग टीम खुद इनिंग खत्म कर दे (सिर्फ टेस्ट क्रिकेट में), या किसी टारगेट का पीछा करते समय टारगेट पूरा हो जाए।</p>
+      <p style="color:var(--ink-soft); font-size:12.5px;">यह क्रिकेट के नियमों का एक सामान्य विवरण है। Cric Score खुद गली क्रिकेट के लिए एक आसान स्कोरिंग मॉडल इस्तेमाल करता है: विकेट हमेशा स्ट्राइक पर मौजूद बैट्समैन के नाम दर्ज होता है, और रन-आउट, नो-बॉल पर फ्री हिट, और बाउंड्री पर रनिंग बाई इसमें शामिल नहीं हैं।</p>
     `
   },
   privacy: {
     title: "Privacy",
     icon: "🔒",
+    tintVar: "--info-teal-tint",
     body: `
       <p>Cric Score doesn't have a server, an account system, or any analytics. Every match — live or in your history — is stored only in your browser's local storage, on your own device.</p>
       <p>Nothing is uploaded, synced, or shared automatically. If you use the "continue on another device" link, your match data travels only inside that link itself, which you choose to send.</p>
@@ -1056,6 +1144,7 @@ const INFO_CONTENT = {
   contact: {
     title: "Contact & Support",
     icon: "📞",
+    tintVar: "--ball-tint",
     body: `
       <p>Found a bug, or have a suggestion? Reach out any time:</p>
       <div class="contact-row"><span class="contact-ico">📞</span><a href="tel:+918178000377">+91 8178000377</a></div>
@@ -1064,14 +1153,27 @@ const INFO_CONTENT = {
   }
 };
 
+function setContentLang(lang){
+  state.contentLang = lang;
+  save(); render();
+}
 function infoScreen(){
   const info = INFO_CONTENT[state.infoKind] || INFO_CONTENT.about;
+  const lang = state.contentLang || "en";
+  const bodyToShow = (lang==="hi" && info.bodyHi) ? info.bodyHi : info.body;
+  const langToggle = info.bodyHi ? `
+    <div class="lang-toggle">
+      <button class="lang-btn ${lang==="en"?"active":""}" onclick="setContentLang('en')">English</button>
+      <button class="lang-btn ${lang==="hi"?"active":""}" onclick="setContentLang('hi')">हिंदी</button>
+    </div>
+  ` : "";
   return `
     <main>
       <div class="eyebrow">${info.icon} Menu</div>
       <h1>${esc(info.title)}</h1>
-      <div class="card info-body">${info.body}</div>
-      <button class="btn-ghost" style="width:100%; padding:11px 12px;" onclick="backToMenu()">← Back to menu</button>
+      ${langToggle}
+      <div class="card info-body" style="background:var(${info.tintVar || "--card"});">${bodyToShow}</div>
+      <button class="btn-back" onclick="backToMenu()">← Back to menu</button>
     </main>
     <footer>${copyrightLine()}</footer>
   `;
@@ -1171,7 +1273,7 @@ function chatScreen(){
           <button class="chat-send-btn" onclick="sendChatMessage()">➤</button>
         </div>
       </div>
-      <button class="btn-ghost" style="width:100%; padding:11px 12px;" onclick="closeChat()">← Back</button>
+      <button class="btn-back" onclick="closeChat()">← Back</button>
     </main>
     <footer>${copyrightLine()}</footer>
   `;
@@ -1192,6 +1294,7 @@ function welcomeScreen(){
       <div class="hero-title">Cric Score</div>
       <div class="hero-tag">The fastest way to keep score on the street</div>
     </div>
+    <button class="chat-fab" onclick="goToChat()" title="Ask about cricket rules" aria-label="Ask about cricket rules">💬</button>
     <main>
       <div class="pitch-list">
         <div class="pitch-item"><span class="pitch-ico">⚡</span><span>Two team names, an overs count, done — no squads to fill in</span></div>
@@ -1205,7 +1308,6 @@ function welcomeScreen(){
       ` : `
         <button class="btn btn-primary" onclick="goToSetup()">Start scoring →</button>
       `}
-      <button class="btn-chat" onclick="goToChat()">💬 Ask about cricket rules</button>
       ${hasHistory ? `<button class="btn-ghost" style="width:100%; padding:11px 12px;" onclick="openHistory()">📜 Match history</button>` : ""}
     </main>
     <footer>Everything stays on this device.${copyrightLine()}</footer>
@@ -1368,7 +1470,9 @@ function scoringScreen(){
       <div class="topbar-row">
         <button class="icon-btn" onclick="goHome()" title="Home" aria-label="Home">🏠</button>
         <div class="match-title">${esc(state.teamAName)} vs ${esc(state.teamBName)}</div>
-        <button class="innings-pill" onclick="editOvers()" title="Change overs">${state.oversLimit} OV · INNINGS ${state.inningsIndex+1} OF 2 ✎</button>
+        ${state.inningsIndex===0
+          ? `<button class="innings-pill" onclick="editOvers()" title="Change overs">${state.oversLimit} OV · INNINGS 1 OF 2 ✎</button>`
+          : `<div class="innings-pill locked" title="Overs are locked once the 2nd innings starts">${state.oversLimit} OV · INNINGS 2 OF 2 🔒</div>`}
         <button class="icon-btn" onclick="shareTransferLink()" title="Continue on another device" aria-label="Continue on another device">🔗</button>
       </div>
     </div>
