@@ -35,6 +35,7 @@
     --info-purple-tint:#efe7f5;
     --info-teal:#1f7a6c;
     --info-teal-tint:#e2f2ee;
+    --chip-glass:rgba(255,255,255,0.55);
     --shadow:rgba(28,37,33,0.10);
     --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Menlo, Consolas, monospace;
@@ -60,6 +61,7 @@
       --info-purple-tint:#241c2c;
       --info-teal:#5fd0b8;
       --info-teal-tint:#132821;
+      --chip-glass:rgba(0,0,0,0.28);
       --shadow:rgba(0,0,0,0.45);
     }
   }
@@ -68,14 +70,14 @@
     --line:#2a3226; --turf:#5aab7c; --turf-strong:#7fcb9d; --turf-tint:#1a2b21;
     --ball:#e2685a; --ball-tint:#2e1c19; --bail:#dba53f; --bail-tint:#2c2313; --shadow:rgba(0,0,0,0.45);
     --info-blue:#7bb0e8; --info-blue-tint:#182533; --info-purple:#bd9bde; --info-purple-tint:#241c2c;
-    --info-teal:#5fd0b8; --info-teal-tint:#132821;
+    --info-teal:#5fd0b8; --info-teal-tint:#132821; --chip-glass:rgba(0,0,0,0.28);
   }
   :root[data-theme="light"]{
     --ink:#1c2521; --ink-soft:#5b655e; --paper:#f6f3ea; --card:#ffffff; --card-line:#e4ddc9;
     --line:#ddd5c0; --turf:#2f6b4f; --turf-strong:#1f4d38; --turf-tint:#e7f0e8;
     --ball:#b23a2e; --ball-tint:#f8e6e2; --bail:#a9701c; --bail-tint:#f5ead4; --shadow:rgba(28,37,33,0.10);
     --info-blue:#2f5f8a; --info-blue-tint:#e7eef5; --info-purple:#6b4a94; --info-purple-tint:#efe7f5;
-    --info-teal:#1f7a6c; --info-teal-tint:#e2f2ee;
+    --info-teal:#1f7a6c; --info-teal-tint:#e2f2ee; --chip-glass:rgba(255,255,255,0.55);
   }
 
   *{ box-sizing:border-box; }
@@ -169,14 +171,15 @@
   .menu-list{ display: flex; flex-direction: column; gap: 10px; }
   .menu-item{
     display: flex; align-items: center; gap: 12px;
-    background: var(--card); border: 1.5px solid var(--card-line); border-radius: 10px;
+    background: var(--accent-tint, var(--card)); border: 1.5px solid var(--card-line); border-radius: 10px;
     padding: 12px 16px; font-size: 14.5px; font-weight: 700; color: var(--ink);
     cursor: pointer; text-align: left; width: 100%;
   }
   .menu-item:hover{ border-color: var(--accent, var(--turf)); }
   .menu-item .menu-ico-chip{
     width: 34px; height: 34px; border-radius: 10px; flex-shrink: 0;
-    background: var(--accent-tint, var(--turf-tint));
+    background: var(--chip-glass);
+    box-shadow: inset 0 0 0 1.5px var(--accent, var(--turf));
     display: flex; align-items: center; justify-content: center; font-size: 17px;
   }
   .menu-item .menu-arrow{ margin-left: auto; color: var(--accent, var(--ink-soft)); font-weight: 700; }
@@ -207,7 +210,9 @@
   .contact-row a{ color: var(--turf-strong); text-decoration: none; }
   .contact-row a:hover{ text-decoration: underline; }
   .chat-fab{
-    position: absolute; bottom: 86px; right: 22px;
+    position: fixed;
+    bottom: calc(94px + env(safe-area-inset-bottom, 0px));
+    right: calc(max(0px, (100vw - 460px) / 2) + 22px);
     width: 56px; height: 56px; border-radius: 50%;
     appearance: none; border: none; cursor: pointer;
     background: var(--turf); color: #fff; font-size: 24px;
@@ -1129,6 +1134,13 @@ const INFO_CONTENT = {
       <p>Every match gets a full scorecard — runs, balls, boundaries, wickets, bowling figures — an automatically suggested Man of the Match, and a saved match history you can revisit or export as a PDF anytime.</p>
       <p>It runs entirely in your browser. No account, no server, and once it's loaded once, no internet connection required.</p>
       <p style="color:var(--ink-soft); font-size:12.5px;">Built by Sushant Kumar.</p>
+    `,
+    bodyHi: `
+      <p>Cric Score गली (स्ट्रीट) क्रिकेट के लिए एक तेज़, आसान स्कोरर है। मैच शुरू करने के लिए सिर्फ दो टीमों के नाम और ओवरों की संख्या डालें — पहले से कोई स्क्वाड लिस्ट भरने की ज़रूरत नहीं।</p>
+      <p>बैट्समैन और बॉलर के नाम तभी डाले जाते हैं जब वे असल में बैटिंग या बॉलिंग करने आते हैं, इसलिए सेटअप मिनटों में नहीं, सेकंडों में हो जाता है।</p>
+      <p>हर मैच का पूरा स्कोरकार्ड मिलता है — रन, बॉल, बाउंड्री, विकेट, बॉलिंग फिगर — साथ ही अपने आप सुझाया गया Man of the Match, और एक सेव की गई मैच हिस्ट्री जिसे आप कभी भी देख सकते हैं या PDF के रूप में एक्सपोर्ट कर सकते हैं।</p>
+      <p>यह पूरी तरह आपके ब्राउज़र में चलता है। कोई अकाउंट नहीं, कोई सर्वर नहीं, और एक बार लोड होने के बाद इंटरनेट कनेक्शन की भी ज़रूरत नहीं।</p>
+      <p style="color:var(--ink-soft); font-size:12.5px;">Sushant Kumar द्वारा बनाया गया।</p>
     `
   },
   howto: {
@@ -1229,6 +1241,11 @@ const INFO_CONTENT = {
       <p>Cric Score doesn't have a server, an account system, or any analytics. Every match — live or in your history — is stored only in your browser's local storage, on your own device.</p>
       <p>Nothing is uploaded, synced, or shared automatically. If you use the "continue on another device" link, your match data travels only inside that link itself, which you choose to send.</p>
       <p>Clearing your browser's site data, or uninstalling the app, permanently removes everything — there's no backup copy anywhere else.</p>
+    `,
+    bodyHi: `
+      <p>Cric Score में कोई सर्वर नहीं है, कोई अकाउंट सिस्टम नहीं है, और कोई एनालिटिक्स भी नहीं है। हर मैच — चाहे लाइव हो या हिस्ट्री में — केवल आपके ब्राउज़र के लोकल स्टोरेज में, आपकी अपनी डिवाइस पर सेव होता है।</p>
+      <p>कुछ भी अपने आप अपलोड, सिंक या शेयर नहीं होता। अगर आप "continue on another device" लिंक इस्तेमाल करते हैं, तो आपका मैच डेटा सिर्फ उस लिंक के अंदर ही जाता है, जिसे भेजने का फैसला आप खुद लेते हैं।</p>
+      <p>अपने ब्राउज़र का साइट डेटा साफ़ करने या ऐप अनइंस्टॉल करने से सब कुछ हमेशा के लिए मिट जाता है — इसकी कोई बैकअप कॉपी कहीं और नहीं होती।</p>
     `
   },
   contact: {
