@@ -170,6 +170,20 @@
   .hero-menu-btn svg{ width: 18px; height: 18px; display: block; }
   .hero-menu-btn:hover{ background: rgba(255,255,255,0.28); }
   .hero-menu-btn:active{ transform: scale(0.92); }
+  .hero-chat-btn{
+    position: absolute; top: 14px; right: 14px;
+    appearance: none; cursor: pointer;
+    width: 40px; height: 40px; border-radius: 50%;
+    background: rgba(255,255,255,0.16);
+    border: 1px solid rgba(255,255,255,0.35);
+    backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+    box-shadow: 0 4px 14px rgba(0,0,0,0.25);
+    color: #fff; font-size: 17px;
+    display: flex; align-items: center; justify-content: center;
+    transition: transform .15s ease, background .15s ease;
+  }
+  .hero-chat-btn:hover{ background: rgba(255,255,255,0.28); }
+  .hero-chat-btn:active{ transform: scale(0.92); }
   .menu-list{ display: flex; flex-direction: column; gap: 10px; }
   .menu-item{
     display: flex; align-items: center; gap: 12px;
@@ -211,17 +225,6 @@
   .contact-row .contact-ico{ font-size: 18px; flex-shrink: 0; }
   .contact-row a{ color: var(--turf-strong); text-decoration: none; }
   .contact-row a:hover{ text-decoration: underline; }
-  .chat-fab{
-    position: fixed;
-    bottom: calc(94px + env(safe-area-inset-bottom, 0px));
-    right: calc(max(0px, (100vw - 460px) / 2) + 22px);
-    width: 56px; height: 56px; border-radius: 50%;
-    appearance: none; border: none; cursor: pointer;
-    background: var(--turf); color: #fff; font-size: 24px;
-    display: flex; align-items: center; justify-content: center;
-    box-shadow: 0 8px 20px rgba(0,0,0,0.3); z-index: 30;
-  }
-  .chat-fab:hover{ filter: brightness(1.06); }
   @keyframes boundaryPop{
     0%{ transform: translate(-50%,-50%) scale(0.3) rotate(-10deg); opacity: 0; }
     18%{ transform: translate(-50%,-50%) scale(1.18) rotate(4deg); opacity: 1; }
@@ -945,7 +948,17 @@ function scorecardHtml(inning, label){
 }
 
 let lastFireworksMatchId = null;
+let navStack = [];
+let lastRenderedSnapshot = null;
+let suppressNavPush = false;
 function render(){
+  if(!suppressNavPush && lastRenderedSnapshot && lastRenderedSnapshot.screen !== state.screen){
+    navStack.push(lastRenderedSnapshot);
+    history.pushState({navDepth: navStack.length}, "", location.href);
+  }
+  suppressNavPush = false;
+  lastRenderedSnapshot = JSON.parse(JSON.stringify(state));
+
   document.documentElement.setAttribute("data-app-screen", state.screen);
   document.getElementById("app").innerHTML = screenHtml();
   if(state.screen==="result" && state.matchId && state.matchId!==lastFireworksMatchId){
@@ -955,6 +968,15 @@ function render(){
     }
   }
 }
+window.addEventListener("popstate", () => {
+  const prev = navStack.pop();
+  if(prev){
+    suppressNavPush = true;
+    state = prev;
+    save();
+    render();
+  }
+});
 let fireworksAudioCtx = null;
 function getFireworksAudioCtx(){
   if(!fireworksAudioCtx){
@@ -1405,11 +1427,11 @@ function welcomeScreen(){
       <button class="hero-menu-btn" onclick="openMenu()" title="Menu" aria-label="Menu">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg>
       </button>
+      <button class="hero-chat-btn" onclick="goToChat()" title="Ask about cricket rules" aria-label="Ask about cricket rules">💬</button>
       <img src="icon-512.png" alt="" class="hero-icon" width="128" height="128">
       <div class="hero-title">Cric Score</div>
       <div class="hero-tag">The fastest way to keep score on the street</div>
     </div>
-    <button class="chat-fab" onclick="goToChat()" title="Ask about cricket rules" aria-label="Ask about cricket rules">💬</button>
     <main>
       <div class="pitch-list">
         <div class="pitch-item"><span class="pitch-ico">⚡</span><span>Two team names, an overs count, done — no squads to fill in</span></div>
@@ -1433,11 +1455,11 @@ function setupScreen(){
   const hasHistory = loadHistory().length>0;
   return `
     <main>
-      <div class="topbar-row" style="margin-bottom:-6px;">
+      <div class="topbar-row" style="align-items:center; margin-bottom:10px;">
         <button class="icon-btn" onclick="backToWelcome()" title="Back" aria-label="Back">←</button>
+        <div class="eyebrow" style="margin:0;">Cric Score</div>
         <button class="icon-btn" onclick="backToWelcome()" title="Home" aria-label="Home">🏠</button>
       </div>
-      <div class="eyebrow">Cric Score</div>
       <h1>New match</h1>
       <p class="lede">Two team names and an overs count — nothing else. Batsmen and the bowler go in once play actually starts.</p>
       <div class="card">
@@ -1460,7 +1482,7 @@ function setupScreen(){
       </div>
       ${hasHistory ? `<button class="btn-ghost" style="width:100%; padding:11px 12px;" onclick="openHistory()">📜 Match history</button>` : ""}
     </main>
-    <footer>Names and overs only — no squads to fill in.</footer>
+    <footer>Names and overs only — no squads to fill in.${copyrightLine()}</footer>
   `;
 }
 
