@@ -158,15 +158,21 @@
   .boot-splash{
     position: fixed; inset: 0; z-index: 9999;
     min-height: 100vh; min-height: 100dvh;
-    background: url("splash-batsman.png") center top / cover no-repeat, radial-gradient(circle at 32% 26%, #f7b044 0%, #c96a1f 52%, #5e2e10 100%);
+    display: flex; justify-content: center;
+    background: radial-gradient(circle at 32% 26%, #f7b044 0%, #c96a1f 52%, #5e2e10 100%);
     cursor: pointer;
+    overflow: hidden;
+  }
+  .boot-splash-img{
+    position: relative; width: 100%; max-width: 460px; height: 100%;
+    background: url("splash-batsman.png") center top / cover no-repeat;
   }
   .boot-splash-title{
     position: absolute; left: 0; right: 0; bottom: 5%; text-align: center;
     font-weight: 800; line-height: 1.02;
   }
   .boot-splash-title .line1, .boot-splash-title .line2{
-    font-size: 10.1vw; letter-spacing: -0.01em;
+    font-size: min(10.1vw, 46px); letter-spacing: -0.01em;
     text-shadow: 0 3px 10px rgba(0,0,0,0.5);
     opacity: 0;
     animation: bootTitleIn 0.5s ease forwards;
@@ -510,7 +516,7 @@
   }
 </style>
 
-<div class="shell" id="app"><div class="boot-splash" id="bootSplash" title="Tap to skip"><div class="boot-splash-title"><div class="line1">Cric</div><div class="line2">Score</div></div></div></div>
+<div class="shell" id="app"><div class="boot-splash" id="bootSplash" title="Tap to skip"><div class="boot-splash-img"><div class="boot-splash-title"><div class="line1">Cric</div><div class="line2">Score</div></div></div></div></div>
 
 <script>
 const STORAGE_KEY = "gullyScorerState_v1";
