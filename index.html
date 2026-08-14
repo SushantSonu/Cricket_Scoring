@@ -156,11 +156,31 @@
     color: #fff;
   }
   .boot-splash{
+    position: fixed; inset: 0; z-index: 9999;
     min-height: 100vh; min-height: 100dvh;
-    display: flex; align-items: center; justify-content: center;
-    background: radial-gradient(circle at 32% 26%, #f7b044 0%, #c96a1f 52%, #5e2e10 100%);
+    background: url("splash-batsman.png") center top / cover no-repeat, radial-gradient(circle at 32% 26%, #f7b044 0%, #c96a1f 52%, #5e2e10 100%);
+    cursor: pointer;
   }
-  .boot-splash img{ border-radius: 50%; object-fit: cover; box-shadow: 0 12px 28px rgba(30,15,0,0.4); display: block; }
+  .boot-splash-title{
+    position: absolute; left: 0; right: 0; bottom: 5%; text-align: center;
+    font-weight: 800; line-height: 1.02;
+  }
+  .boot-splash-title .line1, .boot-splash-title .line2{
+    font-size: 10.1vw; letter-spacing: -0.01em;
+    text-shadow: 0 3px 10px rgba(0,0,0,0.5);
+    opacity: 0;
+    animation: bootTitleIn 0.5s ease forwards;
+    animation-delay: 0.4s;
+  }
+  .boot-splash-title .line1{ color: #fff; }
+  .boot-splash-title .line2{ color: #7fe0c4; animation-delay: 0.55s; }
+  @keyframes bootTitleIn{
+    from{ opacity: 0; transform: translateY(8px); }
+    to{ opacity: 1; transform: translateY(0); }
+  }
+  @media (prefers-reduced-motion: reduce){
+    .boot-splash-title .line1, .boot-splash-title .line2{ animation: none; opacity: 1; transform: none; }
+  }
   .hero-menu-btn, .hero-bell-btn{
     position: absolute;
     appearance: none; cursor: pointer;
@@ -490,7 +510,7 @@
   }
 </style>
 
-<div class="shell" id="app"><div class="boot-splash"><img src="icon-512.png" alt="" width="128" height="128"></div></div>
+<div class="shell" id="app"><div class="boot-splash" id="bootSplash" title="Tap to skip"><div class="boot-splash-title"><div class="line1">Cric</div><div class="line2">Score</div></div></div></div>
 
 <script>
 const STORAGE_KEY = "gullyScorerState_v1";
@@ -809,6 +829,44 @@ function addWicket(){
   inning.thisOverBalls.push("W");
   afterLegalBall(inning);
   inning.batsmen[key] = emptyBatsman();
+  finishAction();
+}
+function openWicketMenu(){
+  if(hasPending()) return;
+  state.wicketMenuOpen = true;
+  save(); render();
+}
+function closeWicketMenu(){
+  state.wicketMenuOpen = false;
+  save(); render();
+}
+function confirmBowlerWicket(){
+  state.wicketMenuOpen = false;
+  addWicket();
+}
+function confirmRunOut(dismissedKey){
+  state.wicketMenuOpen = false;
+  addRunOut(dismissedKey);
+}
+function addRunOut(dismissedKey){
+  if(hasPending()) return;
+  pushUndo();
+  const inning = currentInning();
+  const strikerKey = inning.onStrike;
+  const b = inning.batsmen[dismissedKey];
+  b.out = true;
+  if(dismissedKey === strikerKey) b.balls += 1;
+  inning.legalBalls += 1;
+  inning.wickets += 1;
+  inning.bowlers[inning.currentBowler].balls += 1;
+  inning.fallOfWickets.push({
+    name:b.name, runs:b.runs, balls:b.balls, atScore:inning.runs, wicketNo:inning.wickets,
+    bowler: "run out",
+    ones:b.ones, twos:b.twos, threes:b.threes, fours:b.fours, sixes:b.sixes
+  });
+  inning.thisOverBalls.push("W");
+  afterLegalBall(inning);
+  inning.batsmen[dismissedKey] = emptyBatsman();
   finishAction();
 }
 function endInningsManual(){
@@ -1625,7 +1683,7 @@ function scoringScreen(){
     <div class="pad">
       <div class="run-grid">
         ${[0,1,2,3,4,5,6].map(n=>`<button class="run-btn ${(n===4||n===6)?'boundary':''}" onclick="addRuns(${n})">${n}</button>`).join("")}
-        <button class="run-btn" onclick="addWicket()" style="visibility:hidden"></button>
+        <button class="run-btn" onclick="openWicketMenu()" style="visibility:hidden"></button>
       </div>
       <div class="extra-grid">
         <button class="extra-btn" onclick="addExtra('wide')">Wide</button>
@@ -1633,11 +1691,21 @@ function scoringScreen(){
         <button class="extra-btn" onclick="addByeType('bye')">Bye</button>
         <button class="extra-btn" onclick="addByeType('legBye')">Leg bye</button>
       </div>
-      <button class="btn wicket-btn" onclick="addWicket()">Wicket</button>
+      <button class="btn wicket-btn" onclick="openWicketMenu()">Wicket</button>
       <div class="util-row">
         <button class="btn-ghost" onclick="undo()">↺ Undo</button>
         <button class="btn-ghost" onclick="endInningsManual()">End innings</button>
       </div>
+    </div>
+  `;
+  const wicketMenuHtml = `
+    <div class="card wicket-menu">
+      <div class="entry-title">Wicket — who's out, and how?</div>
+      <div class="entry-hint">Bowled/caught/stumped/LBW/hit wicket always dismiss the striker. A run out can be either batsman.</div>
+      <button class="btn-choice" onclick="confirmBowlerWicket()"><span>${esc(striker.name)} — bowled / caught / stumped / LBW / hit wicket</span></button>
+      <button class="btn-choice" onclick="confirmRunOut('${strikerKey}')"><span>${esc(striker.name)} run out <span class="arrow">(striker)</span></span></button>
+      <button class="btn-choice" onclick="confirmRunOut('${nonKey}')"><span>${esc(nonStriker.name)} run out <span class="arrow">(non-striker)</span></span></button>
+      <button class="btn-ghost" style="width:100%; padding:11px 12px; margin-top:4px;" onclick="closeWicketMenu()">Cancel</button>
     </div>
   `;
 
@@ -1661,7 +1729,7 @@ function scoringScreen(){
         </div>
         ${subLine}
       </div>
-      ${pending ? entryFormHtml(inning) : `${crewHtml}${bowlerHtml}${overStrip}${padHtml}`}
+      ${pending ? entryFormHtml(inning) : `${crewHtml}${bowlerHtml}${overStrip}${state.wicketMenuOpen ? wicketMenuHtml : padHtml}`}
     </main>
   `;
 }
@@ -1798,7 +1866,20 @@ function historyDetailScreen(){
   `;
 }
 
-render();
+function playBootAnimation(cb){
+  const reduceMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if(reduceMotion){ cb(); return; }
+  let done = false;
+  const finish = () => {
+    if(done) return;
+    done = true;
+    cb();
+  };
+  const el = document.getElementById("bootSplash");
+  if(el) el.addEventListener("click", finish, { once: true });
+  setTimeout(finish, 1500);
+}
+playBootAnimation(render);
 
 if("serviceWorker" in navigator){
   window.addEventListener("load", () => {

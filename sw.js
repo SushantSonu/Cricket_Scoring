@@ -1,5 +1,5 @@
 const CACHE_NAME = "gully-score-v1";
-const CORE_ASSETS = ["./", "./index.html", "./manifest.json", "./icon-192.png", "./icon-512.png"];
+const CORE_ASSETS = ["./", "./index.html", "./manifest.json", "./icon-192.png", "./icon-512.png", "./splash-batsman.png"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
