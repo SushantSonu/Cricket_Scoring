@@ -1,0 +1,8 @@
+[{
+  "relation": ["delegate_permission/common.handle_all_urls"],
+  "target": {
+    "namespace": "android_app",
+    "package_name": "co.cricscore.twa",
+    "sha256_cert_fingerprints": ["FF:22:D1:53:DE:79:F0:5D:52:E0:3B:E9:A7:46:C8:1B:2E:2A:1E:DA:D7:66:26:D5:09:8E:DF:6E:2B:29:17:0E"]
+  }
+}]
