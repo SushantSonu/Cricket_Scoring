@@ -411,9 +411,9 @@
   .crew{ display:flex; gap:10px; }
   .crew-chip{
     flex:1; background:var(--card); border:1px solid var(--card-line); border-radius:10px;
-    padding:12px 14px; min-width:0;
+    padding:12px 14px; min-width:0; transition:background .2s ease, border-color .2s ease;
   }
-  .crew-chip.on-strike{ border-color:var(--turf); box-shadow:inset 0 0 0 1px var(--turf); }
+  .crew-chip.on-strike{ border-color:var(--turf); box-shadow:inset 0 0 0 1px var(--turf); background:var(--turf-tint); }
   .crew-label{ font-size:10.5px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:var(--ink-soft); display:flex; align-items:center; gap:6px; margin-bottom:5px; }
   .dot{ width:6px; height:6px; border-radius:50%; background:var(--turf); flex-shrink:0; }
   .dot.hollow{ background:transparent; border:1.5px solid var(--ink-soft); }
@@ -616,6 +616,8 @@ function migrateState(s){
       migrateBatsman(f);
       if(f.bowler===undefined) f.bowler=null;
       if(f.atOver===undefined) f.atOver=null;
+      if(f.dismissalType===undefined) f.dismissalType = f.bowler==="run out" ? "runout" : null;
+      if(f.fielder===undefined) f.fielder=null;
     });
     Object.values(inning.bowlers||{}).forEach(bf=>{
       if(typeof bf.maidens !== "number") bf.maidens = 0;
@@ -851,7 +853,7 @@ function addByeType(type){
   afterLegalBall(inning);
   finishAction();
 }
-function addWicket(){
+function addWicket(dismissalType, fielder){
   if(hasPending()) return;
   pushUndo();
   const inning = currentInning();
@@ -867,6 +869,7 @@ function addWicket(){
     name:b.name, runs:b.runs, balls:b.balls, atScore:inning.runs, wicketNo:inning.wickets,
     atOver: oversText(inning.legalBalls),
     bowler: inning.currentBowler,
+    dismissalType: dismissalType || "out", fielder: fielder || null,
     ones:b.ones, twos:b.twos, threes:b.threes, fours:b.fours, sixes:b.sixes
   });
   inning.thisOverBalls.push("W");
@@ -883,15 +886,22 @@ function closeWicketMenu(){
   state.wicketMenuOpen = false;
   save(); render();
 }
-function confirmBowlerWicket(){
+function confirmDismissal(type){
   state.wicketMenuOpen = false;
-  addWicket();
+  let fielder = null;
+  if(type==="caught"){
+    const name = prompt("Who took the catch? (leave blank if the bowler caught it)", "");
+    fielder = name && name.trim() ? name.trim() : null;
+  }
+  addWicket(type, fielder);
 }
 function confirmRunOut(dismissedKey){
   state.wicketMenuOpen = false;
-  addRunOut(dismissedKey);
+  const name = prompt("Which fielder ran them out? (optional)", "");
+  const fielder = name && name.trim() ? name.trim() : null;
+  addRunOut(dismissedKey, fielder);
 }
-function addRunOut(dismissedKey){
+function addRunOut(dismissedKey, fielder){
   if(hasPending()) return;
   pushUndo();
   const inning = currentInning();
@@ -906,6 +916,7 @@ function addRunOut(dismissedKey){
     name:b.name, runs:b.runs, balls:b.balls, atScore:inning.runs, wicketNo:inning.wickets,
     atOver: oversText(inning.legalBalls),
     bowler: "run out",
+    dismissalType: "runout", fielder: fielder || null,
     ones:b.ones, twos:b.twos, threes:b.threes, fours:b.fours, sixes:b.sixes
   });
   inning.thisOverBalls.push("W");
@@ -952,7 +963,6 @@ function renameBatsman(inningIndex, ref){
   if(ref.type==="live") inning.batsmen[ref.key].name = trimmed;
   else if(ref.type==="retired") inning.retired[ref.idx].name = trimmed;
   else inning.fallOfWickets[ref.idx].name = trimmed;
-  if(state.screen==="result") archiveMatch();
   save(); render();
 }
 function toggleExtra(type){
@@ -1085,6 +1095,21 @@ function srText(p){
   const sr = p.balls>0 ? (p.runs/p.balls*100).toFixed(2) : "0.00";
   return `4s ${p.fours||0} · 6s ${p.sixes||0} · SR ${sr}`;
 }
+function dismissalText(p){
+  if(p.retired) return "retired hurt";
+  if(!p.out) return "not out";
+  const bowler = esc(p.bowler || "?");
+  const fielder = p.fielder ? esc(p.fielder) : null;
+  switch(p.dismissalType){
+    case "bowled": return `b ${bowler}`;
+    case "caught": return fielder ? `c ${fielder} b ${bowler}` : `c &amp; b ${bowler}`;
+    case "lbw": return `lbw b ${bowler}`;
+    case "stumped": return `st b ${bowler}`;
+    case "hitwicket": return `hit wicket b ${bowler}`;
+    case "runout": return fielder ? `run out (${fielder})` : "run out";
+    default: return `out &middot; ${bowler}`;
+  }
+}
 function nameRefAttr(inningIndex, p){
   if(inningIndex==null) return "";
   const ref = p.out ? `{type:'fow',idx:${p.fowIndex}}` : p.retired ? `{type:'retired',idx:${p.retiredIndex}}` : `{type:'live',key:'${p.liveKey}'}`;
@@ -1101,7 +1126,7 @@ function scorecardHtml(inning, label, inningIndex, extrasEnabled){
         <span class="bat-figs">${p.runs} (${p.balls})</span>
       </div>
       <div class="bat-row-sub">
-        <span>${p.retired ? "retired hurt" : p.out ? `out &middot; ${esc(p.bowler || "?")}` : "not out"}</span>
+        <span>${dismissalText(p)}</span>
         <span>${srText(p)}</span>
       </div>
     </div>
@@ -1773,18 +1798,18 @@ function scoringScreen(){
 
   const crewHtml = (striker.name || nonStriker.name) ? `
     <div class="crew">
-      <div class="crew-chip ${striker.name?'on-strike':''}">
-        <div class="crew-label"><span class="dot"></span>On strike</div>
-        <div class="crew-name">${striker.name?esc(striker.name):"—"}${striker.name ? `<button class="edit-name-btn" onclick="renameBatsman(${state.inningsIndex},{type:'live',key:'${strikerKey}'})" title="Fix name" aria-label="Fix name">&#9998;</button>` : ""}</div>
-        <div class="crew-figs">${striker.name? striker.runs+" ("+striker.balls+")" : ""}</div>
-        ${striker.name && (striker.fours||striker.sixes) ? `<div class="crew-boundaries">4s ${striker.fours} · 6s ${striker.sixes}</div>` : ""}
-      </div>
-      <div class="crew-chip">
-        <div class="crew-label"><span class="dot hollow"></span>Non-strike</div>
-        <div class="crew-name">${nonStriker.name?esc(nonStriker.name):"—"}${nonStriker.name ? `<button class="edit-name-btn" onclick="renameBatsman(${state.inningsIndex},{type:'live',key:'${nonKey}'})" title="Fix name" aria-label="Fix name">&#9998;</button>` : ""}</div>
-        <div class="crew-figs">${nonStriker.name? nonStriker.runs+" ("+nonStriker.balls+")" : ""}</div>
-        ${nonStriker.name && (nonStriker.fours||nonStriker.sixes) ? `<div class="crew-boundaries">4s ${nonStriker.fours} · 6s ${nonStriker.sixes}</div>` : ""}
-      </div>
+      ${["A","B"].map(k=>{
+        const b = inning.batsmen[k];
+        const onStrike = inning.onStrike===k;
+        return `
+          <div class="crew-chip ${onStrike?'on-strike':''}">
+            <div class="crew-label"><span class="dot ${onStrike?'':'hollow'}"></span>${onStrike?"On strike":"Non-strike"}</div>
+            <div class="crew-name">${b.name?esc(b.name):"—"}${b.name ? `<button class="edit-name-btn" onclick="renameBatsman(${state.inningsIndex},{type:'live',key:'${k}'})" title="Fix name" aria-label="Fix name">&#9998;</button>` : ""}</div>
+            <div class="crew-figs">${b.name? b.runs+" ("+b.balls+")" : ""}</div>
+            ${b.name && (b.fours||b.sixes) ? `<div class="crew-boundaries">4s ${b.fours} · 6s ${b.sixes}</div>` : ""}
+          </div>
+        `;
+      }).join("")}
     </div>
   ` : "";
 
@@ -1837,9 +1862,13 @@ function scoringScreen(){
   `;
   const wicketMenuHtml = `
     <div class="card wicket-menu">
-      <div class="entry-title">Wicket — who's out, and how?</div>
-      <div class="entry-hint">Bowled/caught/stumped/LBW/hit wicket always dismiss the striker. A run out can be either batsman.</div>
-      <button class="btn-choice" onclick="confirmBowlerWicket()"><span>${esc(striker.name)} — bowled / caught / stumped / LBW / hit wicket</span></button>
+      <div class="entry-title">Wicket — how did ${esc(striker.name)} get out?</div>
+      <div class="entry-hint">Bowled/caught/LBW/stumped/hit wicket always dismiss the striker. A run out can be either batsman.</div>
+      <button class="btn-choice" onclick="confirmDismissal('bowled')"><span>Bowled</span></button>
+      <button class="btn-choice" onclick="confirmDismissal('caught')"><span>Caught</span></button>
+      <button class="btn-choice" onclick="confirmDismissal('lbw')"><span>LBW</span></button>
+      <button class="btn-choice" onclick="confirmDismissal('stumped')"><span>Stumped</span></button>
+      <button class="btn-choice" onclick="confirmDismissal('hitwicket')"><span>Hit wicket</span></button>
       <button class="btn-choice" onclick="confirmRunOut('${strikerKey}')"><span>${esc(striker.name)} run out <span class="arrow">(striker)</span></span></button>
       <button class="btn-choice" onclick="confirmRunOut('${nonKey}')"><span>${esc(nonStriker.name)} run out <span class="arrow">(non-striker)</span></span></button>
       <button class="btn-ghost" style="width:100%; padding:11px 12px; margin-top:4px;" onclick="closeWicketMenu()">Cancel</button>
@@ -1941,8 +1970,8 @@ function resultScreen(){
         <div style="font-weight:700; margin-bottom:10px">${esc(teamName(i1.battingKey))} ${i1.runs}/${i1.wickets} <span style="color:var(--ink-soft); font-weight:400">(${oversText(i1.legalBalls)} ov)</span> &nbsp;·&nbsp; ${esc(teamName(i2.battingKey))} ${i2.runs}/${i2.wickets} <span style="color:var(--ink-soft); font-weight:400">(${oversText(i2.legalBalls)} ov)</span></div>
       </div>
       ${momCard}
-      <div class="card">${scorecardHtml(i1, "Innings 1", 0, state.extrasEnabled)}</div>
-      <div class="card">${scorecardHtml(i2, "Innings 2", 1, state.extrasEnabled)}</div>
+      <div class="card">${scorecardHtml(i1, "Innings 1", null, state.extrasEnabled)}</div>
+      <div class="card">${scorecardHtml(i2, "Innings 2", null, state.extrasEnabled)}</div>
       <div class="no-print" style="display:flex; flex-direction:column; gap:8px;">
         <button class="btn btn-export" onclick="exportScorecard()">⬇ Export PDF</button>
         <button class="btn btn-primary" onclick="newMatch()">New match</button>
