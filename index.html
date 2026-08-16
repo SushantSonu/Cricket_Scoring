@@ -319,7 +319,7 @@
     width: 40px; height: 40px; border-radius: 50%; background: var(--turf); color: #fff; font-size: 16px;
   }
   .chat-send-btn:hover{ filter: brightness(1.06); }
-  .hero-icon{ border-radius: 30px; box-shadow: 0 12px 28px rgba(30,15,0,0.4); margin-bottom: 16px; }
+  .hero-icon{ border-radius: 50%; box-shadow: 0 12px 28px rgba(30,15,0,0.4); margin-bottom: 16px; background:#fff; }
   .hero-title{ font-size: 27px; font-weight: 800; letter-spacing: -0.01em; text-shadow: 0 1px 3px rgba(0,0,0,0.3); }
   .hero-tag{
     font-size: 13.5px; color: rgba(255,255,255,0.9); margin: 6px auto 0;
@@ -1640,7 +1640,7 @@ function welcomeScreen(){
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg>
       </button>
       <button class="hero-bell-btn" onclick="goToNotifications()" title="Notifications" aria-label="Notifications">🔔${hasUnseenNotifications() ? '<span class="notif-dot"></span>' : ""}</button>
-      <img src="icon-512.png" alt="" class="hero-icon" width="128" height="128">
+      <img src="icon-512-maskable.png" alt="" class="hero-icon" width="128" height="128">
       <div class="hero-title">Cric Score</div>
       <div class="hero-tag">The fastest way to keep score on the street</div>
     </div>
