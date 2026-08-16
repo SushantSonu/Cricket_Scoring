@@ -243,6 +243,8 @@
   }
   .btn-back:hover{ filter: brightness(1.15); }
   .lang-toggle{ display: flex; gap: 8px; margin: -6px 0 14px; }
+  .extras-toggle-row{ display: flex; flex-wrap: wrap; gap: 8px; }
+  .extras-toggle-row .lang-btn{ flex: 1 1 auto; }
   .lang-btn{
     appearance: none; cursor: pointer; flex: 1;
     border: 1.5px solid var(--card-line); background: var(--card); color: var(--ink-soft);
@@ -459,7 +461,23 @@
   .scorecard-wrap{ overflow-x:auto; }
   .not-out::after{ content:"*"; color:var(--turf-strong); margin-left:2px; }
 
-  .scorecard-caption{ font-size:11.5px; font-weight:700; letter-spacing:0.05em; text-transform:uppercase; color:var(--ink-soft); margin-bottom:8px; }
+  .sc-innings-bar{
+    background:var(--turf); color:#fff; font-weight:800; font-size:13.5px;
+    display:flex; justify-content:space-between; align-items:center;
+    padding:10px 16px; margin:-18px -18px 16px; border-radius:10px 10px 0 0;
+  }
+  .sc-meta-row{
+    display:flex; justify-content:space-between; gap:10px; font-size:12.5px;
+    padding:8px 2px; border-top:1px solid var(--card-line); color:var(--ink-soft);
+  }
+  .sc-meta-row span:first-child{ font-weight:700; color:var(--ink); text-transform:uppercase; font-size:11px; letter-spacing:0.04em; }
+  .sc-total-row{ font-weight:700; color:var(--ink); }
+  .sc-total-row span:first-child{ color:var(--ink); }
+  .edit-name-btn{
+    appearance:none; border:none; background:transparent; cursor:pointer;
+    color:var(--ink-soft); font-size:11px; margin-left:4px; padding:2px; vertical-align:middle;
+  }
+  .edit-name-btn:hover{ color:var(--turf); }
   .bat-list{ display:flex; flex-direction:column; gap:10px; }
   .bat-row{ padding-bottom:9px; border-bottom:1px solid var(--card-line); }
   .bat-row:last-child{ border-bottom:none; padding-bottom:0; }
@@ -520,6 +538,7 @@
 
 <script>
 const STORAGE_KEY = "gullyScorerState_v1";
+const ALL_EXTRAS_ON = { wide:true, noBall:true, bye:true, legBye:true };
 function tryLoadFromHash(){
   if(!location.hash || location.hash.indexOf("state=")===-1) return null;
   try{
@@ -549,6 +568,7 @@ function freshState(){
     screen: "setup",
     teamAName: "", teamBName: "",
     oversLimit: 6,
+    extrasEnabled: { ...ALL_EXTRAS_ON },
     inningsIndex: 0,
     innings: [null, null],
     formError: "",
@@ -565,7 +585,7 @@ function emptyBatsman(){ return { name:null, runs:0, balls:0, out:false, ones:0,
 function freshInning(battingKey, bowlingKey){
   return {
     battingKey, bowlingKey,
-    runs:0, wickets:0, legalBalls:0,
+    runs:0, wickets:0, legalBalls:0, currentOverRuns:0,
     extras:{ wide:0, noBall:0, bye:0, legBye:0 },
     batsmen:{ A: emptyBatsman(), B: emptyBatsman() },
     onStrike:"A",
@@ -573,6 +593,7 @@ function freshInning(battingKey, bowlingKey){
     bowlers:{},
     thisOverBalls:[],
     fallOfWickets:[],
+    retired:[],
     ended:false, endReason:null
   };
 }
@@ -585,12 +606,19 @@ function migrateBatsman(b){
 }
 function migrateState(s){
   if(!s) return s;
+  if(!s.extrasEnabled) s.extrasEnabled = { ...ALL_EXTRAS_ON };
   (s.innings||[]).forEach(inning=>{
     if(!inning) return;
     if(inning.batsmen){ migrateBatsman(inning.batsmen.A); migrateBatsman(inning.batsmen.B); }
+    if(!inning.retired) inning.retired = [];
+    if(typeof inning.currentOverRuns !== "number") inning.currentOverRuns = 0;
     (inning.fallOfWickets||[]).forEach(f=>{
       migrateBatsman(f);
       if(f.bowler===undefined) f.bowler=null;
+      if(f.atOver===undefined) f.atOver=null;
+    });
+    Object.values(inning.bowlers||{}).forEach(bf=>{
+      if(typeof bf.maidens !== "number") bf.maidens = 0;
     });
   });
   return s;
@@ -652,6 +680,11 @@ function checkInningsEnd(inning){
 function afterLegalBall(inning){
   const overJustCompleted = inning.legalBalls % 6 === 0;
   if(overJustCompleted){
+    const bowlerName = inning.currentBowler;
+    if(bowlerName && inning.bowlers[bowlerName] && (inning.currentOverRuns||0) === 0){
+      inning.bowlers[bowlerName].maidens = (inning.bowlers[bowlerName].maidens||0) + 1;
+    }
+    inning.currentOverRuns = 0;
     toggleStrike(inning);
     inning.thisOverBalls = [];
   }
@@ -746,7 +779,7 @@ function confirmEntries(){
   if(needB) inning.batsmen.B.name = b;
   if(needBowler){
     inning.currentBowler = bo;
-    if(!inning.bowlers[bo]) inning.bowlers[bo] = { balls:0, runs:0, wickets:0 };
+    if(!inning.bowlers[bo]) inning.bowlers[bo] = { balls:0, runs:0, wickets:0, maidens:0 };
   }
   state.formError = "";
   save(); render();
@@ -776,6 +809,7 @@ function addRuns(n){
   else if(n===6) inning.batsmen[key].sixes += 1;
   inning.runs += n;
   inning.legalBalls += 1;
+  inning.currentOverRuns = (inning.currentOverRuns||0) + n;
   inning.bowlers[inning.currentBowler].balls += 1;
   inning.bowlers[inning.currentBowler].runs += n;
   inning.thisOverBalls.push(n===0 ? "•" : String(n));
@@ -797,6 +831,7 @@ function addExtra(type){
   const inning = currentInning();
   inning.runs += 1;
   inning.extras[type] += 1;
+  inning.currentOverRuns = (inning.currentOverRuns||0) + 1;
   inning.bowlers[inning.currentBowler].runs += 1;
   inning.thisOverBalls.push(type==="wide" ? "wd" : "nb");
   save(); render();
@@ -808,6 +843,7 @@ function addByeType(type){
   inning.runs += 1;
   inning.extras[type] += 1;
   inning.legalBalls += 1;
+  inning.currentOverRuns = (inning.currentOverRuns||0) + 1;
   inning.bowlers[inning.currentBowler].balls += 1;
   inning.batsmen[inning.onStrike].balls += 1;
   inning.thisOverBalls.push(type==="bye" ? "b" : "lb");
@@ -829,6 +865,7 @@ function addWicket(){
   inning.bowlers[inning.currentBowler].wickets += 1;
   inning.fallOfWickets.push({
     name:b.name, runs:b.runs, balls:b.balls, atScore:inning.runs, wicketNo:inning.wickets,
+    atOver: oversText(inning.legalBalls),
     bowler: inning.currentBowler,
     ones:b.ones, twos:b.twos, threes:b.threes, fours:b.fours, sixes:b.sixes
   });
@@ -867,6 +904,7 @@ function addRunOut(dismissedKey){
   inning.bowlers[inning.currentBowler].balls += 1;
   inning.fallOfWickets.push({
     name:b.name, runs:b.runs, balls:b.balls, atScore:inning.runs, wicketNo:inning.wickets,
+    atOver: oversText(inning.legalBalls),
     bowler: "run out",
     ones:b.ones, twos:b.twos, threes:b.threes, fours:b.fours, sixes:b.sixes
   });
@@ -874,6 +912,52 @@ function addRunOut(dismissedKey){
   afterLegalBall(inning);
   inning.batsmen[dismissedKey] = emptyBatsman();
   finishAction();
+}
+function openRetireMenu(){
+  if(hasPending()) return;
+  state.retireMenuOpen = true;
+  save(); render();
+}
+function closeRetireMenu(){
+  state.retireMenuOpen = false;
+  save(); render();
+}
+function confirmRetireHurt(key){
+  state.retireMenuOpen = false;
+  retireBatsman(key);
+}
+function retireBatsman(key){
+  if(hasPending()) return;
+  pushUndo();
+  const inning = currentInning();
+  const b = inning.batsmen[key];
+  inning.retired.push({
+    name:b.name, runs:b.runs, balls:b.balls,
+    ones:b.ones, twos:b.twos, threes:b.threes, fours:b.fours, sixes:b.sixes
+  });
+  inning.batsmen[key] = emptyBatsman();
+  save(); render();
+}
+function renameBatsman(inningIndex, ref){
+  const inning = state.innings[inningIndex];
+  if(!inning) return;
+  const current = ref.type==="live" ? inning.batsmen[ref.key].name
+    : ref.type==="retired" ? inning.retired[ref.idx].name
+    : inning.fallOfWickets[ref.idx].name;
+  const next = prompt("Correct batsman name:", current);
+  if(next === null) return;
+  const trimmed = next.trim();
+  if(!trimmed || trimmed===current) return;
+  pushUndo();
+  if(ref.type==="live") inning.batsmen[ref.key].name = trimmed;
+  else if(ref.type==="retired") inning.retired[ref.idx].name = trimmed;
+  else inning.fallOfWickets[ref.idx].name = trimmed;
+  if(state.screen==="result") archiveMatch();
+  save(); render();
+}
+function toggleExtra(type){
+  state.extrasEnabled[type] = !state.extrasEnabled[type];
+  save(); render();
 }
 function endInningsManual(){
   if(!confirm("End this innings now?")) return;
@@ -914,8 +998,9 @@ function newMatch(){
 }
 
 function battingList(inning){
-  const list = inning.fallOfWickets.map(f=>({ ...f, out:true }));
-  ["A","B"].forEach(k=>{ if(inning.batsmen[k].name) list.push({ ...inning.batsmen[k], out:false }); });
+  const list = inning.fallOfWickets.map((f,idx)=>({ ...f, out:true, fowIndex:idx }));
+  (inning.retired||[]).forEach((r,idx)=>{ list.push({ ...r, out:false, retired:true, retiredIndex:idx }); });
+  ["A","B"].forEach(k=>{ if(inning.batsmen[k].name) list.push({ ...inning.batsmen[k], out:false, liveKey:k }); });
   return list;
 }
 function allPlayers(s){
@@ -996,37 +1081,66 @@ function deleteHistoryEntry(id){
   saveHistory(loadHistory().filter(h=>h.id!==id));
   render();
 }
-function breakdownText(p){
-  return `1s ${p.ones||0} · 2s ${p.twos||0} · 3s ${p.threes||0} · 4s ${p.fours||0} · 6s ${p.sixes||0}`;
+function srText(p){
+  const sr = p.balls>0 ? (p.runs/p.balls*100).toFixed(2) : "0.00";
+  return `4s ${p.fours||0} · 6s ${p.sixes||0} · SR ${sr}`;
 }
-function scorecardHtml(inning, label){
+function nameRefAttr(inningIndex, p){
+  if(inningIndex==null) return "";
+  const ref = p.out ? `{type:'fow',idx:${p.fowIndex}}` : p.retired ? `{type:'retired',idx:${p.retiredIndex}}` : `{type:'live',key:'${p.liveKey}'}`;
+  return ` <button class="edit-name-btn no-print" onclick="renameBatsman(${inningIndex},${ref})" title="Fix name" aria-label="Fix name">&#9998;</button>`;
+}
+function scorecardHtml(inning, label, inningIndex, extrasEnabled){
+  extrasEnabled = extrasEnabled || ALL_EXTRAS_ON;
   const bats = battingList(inning);
   const bowlers = Object.entries(inning.bowlers).filter(([,f])=>f.balls>0);
   let batRows = bats.map(p=>`
     <div class="bat-row">
       <div class="bat-row-top">
-        <span class="bat-name">${esc(p.name)}${p.out ? "" : '<span class="not-out"></span>'}</span>
+        <span class="bat-name">${esc(p.name)}${(!p.out && !p.retired) ? '<span class="not-out"></span>' : ""}${nameRefAttr(inningIndex, p)}</span>
         <span class="bat-figs">${p.runs} (${p.balls})</span>
       </div>
       <div class="bat-row-sub">
-        <span>${p.out ? `out &middot; ${esc(p.bowler || "?")}` : "not out"}</span>
-        <span>${breakdownText(p)}</span>
+        <span>${p.retired ? "retired hurt" : p.out ? `out &middot; ${esc(p.bowler || "?")}` : "not out"}</span>
+        <span>${srText(p)}</span>
       </div>
     </div>
   `).join("");
-  let bowlRows = bowlers.map(([name,f])=>`<tr><td>${esc(name)}</td><td class="num">${oversText(f.balls)}</td><td class="num">${f.runs}</td><td class="num">${f.wickets}</td></tr>`).join("");
+  let bowlRows = bowlers.map(([name,f])=>{
+    const er = f.balls>0 ? (f.runs/(f.balls/6)).toFixed(2) : "0.00";
+    return `<tr><td>${esc(name)}</td><td class="num">${oversText(f.balls)}</td><td class="num">${f.maidens||0}</td><td class="num">${f.runs}</td><td class="num">${f.wickets}</td><td class="num">${er}</td></tr>`;
+  }).join("");
+  const extraParts = [];
+  if(extrasEnabled.bye) extraParts.push(`${inning.extras.bye||0} B`);
+  if(extrasEnabled.legBye) extraParts.push(`${inning.extras.legBye||0} LB`);
+  if(extrasEnabled.wide) extraParts.push(`${inning.extras.wide||0} WD`);
+  if(extrasEnabled.noBall) extraParts.push(`${inning.extras.noBall||0} NB`);
+  const extrasTotal = (inning.extras.bye||0)+(inning.extras.legBye||0)+(inning.extras.wide||0)+(inning.extras.noBall||0);
+  const oversDecimal = inning.legalBalls/6;
+  const runRate = oversDecimal>0 ? (inning.runs/oversDecimal).toFixed(2) : "0.00";
+  const fowRows = inning.fallOfWickets.map(f=>`<tr><td>${esc(f.name)}</td><td class="num">${f.atScore}/${f.wicketNo}</td><td class="num">${f.atOver||"—"}</td></tr>`).join("");
   return `
+    <div class="sc-innings-bar"><span>${esc(teamName(inning.battingKey))}</span><span>${inning.runs}-${inning.wickets} (${oversText(inning.legalBalls)})</span></div>
     <div class="bat-list">
-      <div class="scorecard-caption">${esc(label)} — Batting</div>
       ${batRows || '<div style="color:var(--ink-soft); font-size:13px">No batsmen recorded.</div>'}
     </div>
+    <div class="sc-meta-row"><span>Extras</span><span>(${extrasTotal}) ${extraParts.join(", ") || "—"}</span></div>
+    <div class="sc-meta-row sc-total-row"><span>Total</span><span>${inning.runs}-${inning.wickets} (${oversText(inning.legalBalls)}) ${runRate}</span></div>
     <div class="scorecard-wrap" style="margin-top:16px">
       <table class="scorecard">
         <caption>${esc(label)} — Bowling</caption>
-        <tr><th>Bowler</th><th class="num">O</th><th class="num">R</th><th class="num">W</th></tr>
-        ${bowlRows || '<tr><td colspan="4" style="color:var(--ink-soft)">No bowlers recorded.</td></tr>'}
+        <tr><th>Bowler</th><th class="num">O</th><th class="num">M</th><th class="num">R</th><th class="num">W</th><th class="num">ER</th></tr>
+        ${bowlRows || '<tr><td colspan="6" style="color:var(--ink-soft)">No bowlers recorded.</td></tr>'}
       </table>
     </div>
+    ${inning.fallOfWickets.length ? `
+    <div class="scorecard-wrap" style="margin-top:16px">
+      <table class="scorecard">
+        <caption>${esc(label)} — Fall of wickets</caption>
+        <tr><th>Batsman</th><th class="num">Score</th><th class="num">Over</th></tr>
+        ${fowRows}
+      </table>
+    </div>` : ""}
   `;
 }
 
@@ -1576,6 +1690,15 @@ function setupScreen(){
           <label for="oversInput">Overs per innings</label>
           <input id="oversInput" type="number" min="1" max="50" step="1" value="${state.oversLimit}">
         </div>
+        <div class="field">
+          <label>Which extras count this match?</label>
+          <div class="extras-toggle-row">
+            <button class="lang-btn ${state.extrasEnabled.wide?"active":""}" onclick="toggleExtra('wide')">Wide</button>
+            <button class="lang-btn ${state.extrasEnabled.noBall?"active":""}" onclick="toggleExtra('noBall')">No ball</button>
+            <button class="lang-btn ${state.extrasEnabled.bye?"active":""}" onclick="toggleExtra('bye')">Bye</button>
+            <button class="lang-btn ${state.extrasEnabled.legBye?"active":""}" onclick="toggleExtra('legBye')">Leg bye</button>
+          </div>
+        </div>
         ${state.formError ? `<div class="error-text">${esc(state.formError)}</div>` : ""}
         <button class="btn btn-primary" onclick="startSetup()">Set overs &amp; continue</button>
       </div>
@@ -1652,13 +1775,13 @@ function scoringScreen(){
     <div class="crew">
       <div class="crew-chip ${striker.name?'on-strike':''}">
         <div class="crew-label"><span class="dot"></span>On strike</div>
-        <div class="crew-name">${striker.name?esc(striker.name):"—"}</div>
+        <div class="crew-name">${striker.name?esc(striker.name):"—"}${striker.name ? `<button class="edit-name-btn" onclick="renameBatsman(${state.inningsIndex},{type:'live',key:'${strikerKey}'})" title="Fix name" aria-label="Fix name">&#9998;</button>` : ""}</div>
         <div class="crew-figs">${striker.name? striker.runs+" ("+striker.balls+")" : ""}</div>
         ${striker.name && (striker.fours||striker.sixes) ? `<div class="crew-boundaries">4s ${striker.fours} · 6s ${striker.sixes}</div>` : ""}
       </div>
       <div class="crew-chip">
         <div class="crew-label"><span class="dot hollow"></span>Non-strike</div>
-        <div class="crew-name">${nonStriker.name?esc(nonStriker.name):"—"}</div>
+        <div class="crew-name">${nonStriker.name?esc(nonStriker.name):"—"}${nonStriker.name ? `<button class="edit-name-btn" onclick="renameBatsman(${state.inningsIndex},{type:'live',key:'${nonKey}'})" title="Fix name" aria-label="Fix name">&#9998;</button>` : ""}</div>
         <div class="crew-figs">${nonStriker.name? nonStriker.runs+" ("+nonStriker.balls+")" : ""}</div>
         ${nonStriker.name && (nonStriker.fours||nonStriker.sixes) ? `<div class="crew-boundaries">4s ${nonStriker.fours} · 6s ${nonStriker.sixes}</div>` : ""}
       </div>
@@ -1685,21 +1808,29 @@ function scoringScreen(){
   }).join("");
   const overStrip = `<div class="over-strip"><span class="over-label">This over</span><div class="ball-chips">${chips || '<span style="color:var(--ink-soft);font-size:12.5px">not started</span>'}</div></div>`;
 
+  const extrasEnabled = state.extrasEnabled || ALL_EXTRAS_ON;
+  const enabledExtras = [
+    { key:"wide", label:"Wide", onclick:"addExtra('wide')" },
+    { key:"noBall", label:"No ball", onclick:"addExtra('noBall')" },
+    { key:"bye", label:"Bye", onclick:"addByeType('bye')" },
+    { key:"legBye", label:"Leg bye", onclick:"addByeType('legBye')" }
+  ].filter(e=>extrasEnabled[e.key]);
+  const extraGridHtml = enabledExtras.length ? `
+    <div class="extra-grid" style="grid-template-columns:repeat(${enabledExtras.length},1fr)">
+      ${enabledExtras.map(e=>`<button class="extra-btn" onclick="${e.onclick}">${e.label}</button>`).join("")}
+    </div>
+  ` : "";
   const padHtml = `
     <div class="pad">
       <div class="run-grid">
         ${[0,1,2,3,4,5,6].map(n=>`<button class="run-btn ${(n===4||n===6)?'boundary':''}" onclick="addRuns(${n})">${n}</button>`).join("")}
         <button class="run-btn" onclick="openWicketMenu()" style="visibility:hidden"></button>
       </div>
-      <div class="extra-grid">
-        <button class="extra-btn" onclick="addExtra('wide')">Wide</button>
-        <button class="extra-btn" onclick="addExtra('noBall')">No ball</button>
-        <button class="extra-btn" onclick="addByeType('bye')">Bye</button>
-        <button class="extra-btn" onclick="addByeType('legBye')">Leg bye</button>
-      </div>
+      ${extraGridHtml}
       <button class="btn wicket-btn" onclick="openWicketMenu()">Wicket</button>
       <div class="util-row">
         <button class="btn-ghost" onclick="undo()">↺ Undo</button>
+        <button class="btn-ghost" onclick="openRetireMenu()">🚑 Retired hurt</button>
         <button class="btn-ghost" onclick="endInningsManual()">End innings</button>
       </div>
     </div>
@@ -1712,6 +1843,15 @@ function scoringScreen(){
       <button class="btn-choice" onclick="confirmRunOut('${strikerKey}')"><span>${esc(striker.name)} run out <span class="arrow">(striker)</span></span></button>
       <button class="btn-choice" onclick="confirmRunOut('${nonKey}')"><span>${esc(nonStriker.name)} run out <span class="arrow">(non-striker)</span></span></button>
       <button class="btn-ghost" style="width:100%; padding:11px 12px; margin-top:4px;" onclick="closeWicketMenu()">Cancel</button>
+    </div>
+  `;
+  const retireMenuHtml = `
+    <div class="card wicket-menu">
+      <div class="entry-title">Retired hurt — who's leaving the field?</div>
+      <div class="entry-hint">Doesn't count as a wicket. A new batsman comes in next.</div>
+      <button class="btn-choice" onclick="confirmRetireHurt('${strikerKey}')"><span>${esc(striker.name)} <span class="arrow">(striker)</span></span></button>
+      <button class="btn-choice" onclick="confirmRetireHurt('${nonKey}')"><span>${esc(nonStriker.name)} <span class="arrow">(non-striker)</span></span></button>
+      <button class="btn-ghost" style="width:100%; padding:11px 12px; margin-top:4px;" onclick="closeRetireMenu()">Cancel</button>
     </div>
   `;
 
@@ -1735,7 +1875,7 @@ function scoringScreen(){
         </div>
         ${subLine}
       </div>
-      ${pending ? entryFormHtml(inning) : `${crewHtml}${bowlerHtml}${overStrip}${state.wicketMenuOpen ? wicketMenuHtml : padHtml}`}
+      ${pending ? entryFormHtml(inning) : `${crewHtml}${bowlerHtml}${overStrip}${state.wicketMenuOpen ? wicketMenuHtml : state.retireMenuOpen ? retireMenuHtml : padHtml}`}
     </main>
   `;
 }
@@ -1748,7 +1888,7 @@ function breakScreen(){
       <div class="eyebrow">Innings break</div>
       <h1>${esc(teamName(inning.battingKey))} made ${inning.runs}/${inning.wickets}</h1>
       <p class="lede">${esc(teamName(inning.bowlingKey))} need <b>${target}</b> to win off ${state.oversLimit} over${state.oversLimit===1?"":"s"}.</p>
-      <div class="card">${scorecardHtml(inning, "Innings 1")}</div>
+      <div class="card">${scorecardHtml(inning, "Innings 1", 0, state.extrasEnabled)}</div>
       <button class="btn btn-primary" onclick="startInnings2()">Start innings 2</button>
       <button class="btn-ghost" style="width:100%; padding:11px 12px;" onclick="editOvers()">✎ Change overs (currently ${state.oversLimit})</button>
       <button class="btn-ghost" style="width:100%; padding:11px 12px;" onclick="shareTransferLink()">🔗 Continue on another device</button>
@@ -1801,8 +1941,8 @@ function resultScreen(){
         <div style="font-weight:700; margin-bottom:10px">${esc(teamName(i1.battingKey))} ${i1.runs}/${i1.wickets} <span style="color:var(--ink-soft); font-weight:400">(${oversText(i1.legalBalls)} ov)</span> &nbsp;·&nbsp; ${esc(teamName(i2.battingKey))} ${i2.runs}/${i2.wickets} <span style="color:var(--ink-soft); font-weight:400">(${oversText(i2.legalBalls)} ov)</span></div>
       </div>
       ${momCard}
-      <div class="card">${scorecardHtml(i1, "Innings 1")}</div>
-      <div class="card">${scorecardHtml(i2, "Innings 2")}</div>
+      <div class="card">${scorecardHtml(i1, "Innings 1", 0, state.extrasEnabled)}</div>
+      <div class="card">${scorecardHtml(i2, "Innings 2", 1, state.extrasEnabled)}</div>
       <div class="no-print" style="display:flex; flex-direction:column; gap:8px;">
         <button class="btn btn-export" onclick="exportScorecard()">⬇ Export PDF</button>
         <button class="btn btn-primary" onclick="newMatch()">New match</button>
@@ -1860,8 +2000,8 @@ function historyDetailScreen(){
       <h1 class="no-print">${esc(entry.teamA)} vs ${esc(entry.teamB)}</h1>
       <p class="lede no-print">${entry.date ? esc(new Date(entry.date).toLocaleDateString())+" · " : ""}${esc(entry.resultText)}</p>
       ${entry.manOfMatch ? `<div class="card mom-card"><div class="mom-eyebrow">🏅 Man of the match</div><div class="mom-name">${esc(entry.manOfMatch)}</div></div>` : ""}
-      <div class="card">${scorecardHtml(i1, "Innings 1")}</div>
-      <div class="card">${scorecardHtml(i2, "Innings 2")}</div>
+      <div class="card">${scorecardHtml(i1, "Innings 1", null, s.extrasEnabled)}</div>
+      <div class="card">${scorecardHtml(i2, "Innings 2", null, s.extrasEnabled)}</div>
       <div class="no-print" style="display:flex; flex-direction:column; gap:8px;">
         <button class="btn btn-export" onclick="exportScorecard()">⬇ Export PDF</button>
         <button class="btn-ghost" style="width:100%; padding:11px 12px;" onclick="backToHistoryList()">← Back to history</button>
