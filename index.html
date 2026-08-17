@@ -455,11 +455,19 @@
 
   table.scorecard{ width:100%; border-collapse:collapse; font-size:13.5px; }
   table.scorecard caption{ text-align:left; font-size:11.5px; font-weight:700; letter-spacing:0.05em; text-transform:uppercase; color:var(--ink-soft); padding-bottom:8px; }
-  table.scorecard th{ text-align:left; font-size:10.5px; letter-spacing:0.04em; text-transform:uppercase; color:var(--ink-soft); border-bottom:1px solid var(--card-line); padding:5px 6px; }
-  table.scorecard td{ padding:6px 6px; border-bottom:1px solid var(--card-line); }
-  table.scorecard td.num, table.scorecard th.num{ text-align:right; font-family:var(--font-mono); font-variant-numeric:tabular-nums; }
-  .scorecard-wrap{ overflow-x:auto; }
+  table.scorecard th{
+    text-align:left; font-size:10.5px; letter-spacing:0.04em; text-transform:uppercase;
+    color:var(--turf-strong); background:var(--turf-tint); border-bottom:1px solid var(--card-line); padding:7px 8px;
+  }
+  table.scorecard th:first-child{ border-top-left-radius:6px; }
+  table.scorecard th:last-child{ border-top-right-radius:6px; }
+  table.scorecard td{ padding:8px; border-bottom:1px solid var(--card-line); vertical-align:top; }
+  table.scorecard tr:nth-child(even) td{ background:var(--paper); }
+  table.scorecard td.num, table.scorecard th.num{ text-align:right; font-family:var(--font-mono); font-variant-numeric:tabular-nums; white-space:nowrap; }
+  .scorecard-wrap{ overflow-x:auto; border:1px solid var(--card-line); border-radius:6px; }
   .not-out::after{ content:"*"; color:var(--turf-strong); margin-left:2px; }
+  .bat-name{ font-weight:700; white-space:nowrap; }
+  .bat-dismissal{ font-size:11px; color:var(--ink-soft); margin-top:2px; white-space:nowrap; }
 
   .sc-innings-bar{
     background:var(--turf); color:#fff; font-weight:800; font-size:13.5px;
@@ -478,15 +486,6 @@
     color:var(--ink-soft); font-size:11px; margin-left:4px; padding:2px; vertical-align:middle;
   }
   .edit-name-btn:hover{ color:var(--turf); }
-  .bat-list{ display:flex; flex-direction:column; gap:10px; }
-  .bat-row{ padding-bottom:9px; border-bottom:1px solid var(--card-line); }
-  .bat-row:last-child{ border-bottom:none; padding-bottom:0; }
-  .bat-row-top{ display:flex; justify-content:space-between; align-items:baseline; gap:10px; font-size:13.5px; }
-  .bat-name{ font-weight:600; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .bat-figs{ font-family:var(--font-mono); font-variant-numeric:tabular-nums; font-weight:700; flex-shrink:0; }
-  .bat-row-sub{ display:flex; justify-content:space-between; gap:10px; font-size:11.5px; color:var(--ink-soft); margin-top:3px; font-variant-numeric:tabular-nums; }
-  .bat-row-sub span:first-child{ text-transform:capitalize; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .bat-row-sub span:last-child{ flex-shrink:0; }
 
   .fireworks-canvas{ position:fixed; inset:0; width:100%; height:100%; pointer-events:none; z-index:50; }
   .result-banner{ background:var(--turf); color:#fff; border-radius:10px; padding:24px 20px; text-align:center; }
@@ -517,7 +516,12 @@
 
   .print-only{ display:none; }
   .no-print{ }
+  .sc-print-header{ text-align:center; margin-bottom:20px; padding-bottom:16px; border-bottom:2.5px solid #1f4d38; }
+  .sc-print-title{ font-weight:800; font-size:23px; letter-spacing:-0.01em; }
+  .sc-print-meta{ font-size:12px; color:#444; margin-top:4px; }
+  .sc-print-brand{ font-size:10px; letter-spacing:0.1em; text-transform:uppercase; color:#1f4d38; font-weight:700; margin-top:10px; }
   @media print{
+    @page{ margin:14mm 12mm; }
     body{ background:#fff; }
     .shell{ box-shadow:none; max-width:none; background:#fff; }
     .no-print{ display:none !important; }
@@ -525,12 +529,19 @@
     .result-banner{ background:#fff !important; color:#111 !important; border:1.5px solid #111; }
     .card, .mom-card, .crew-chip, .bowler-row{ background:#fff !important; border-color:#999 !important; box-shadow:none !important; }
     .mom-card{ background:#fff !important; }
+    .card{ break-inside:avoid; page-break-inside:avoid; }
     :root, :root[data-theme="dark"], :root[data-theme="light"]{
       --ink:#111; --ink-soft:#444; --paper:#fff; --card:#fff; --card-line:#999; --line:#bbb;
       --turf:#1f4d38; --turf-strong:#1f4d38; --turf-tint:#eef5f0; --ball:#8a2a20; --ball-tint:#fbeceA;
       --bail:#7a5210; --bail-tint:#fbf1de;
     }
     main{ padding:0; gap:12px; }
+    .sc-innings-bar, table.scorecard th, .result-banner{
+      -webkit-print-color-adjust:exact; print-color-adjust:exact;
+    }
+    table.scorecard, table.scorecard th, table.scorecard td{ border:1px solid #ccc; }
+    table.scorecard tr:nth-child(even) td{ background:#f5f5f0 !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+    .scorecard-wrap{ break-inside:avoid; page-break-inside:avoid; }
   }
 </style>
 
@@ -1091,9 +1102,8 @@ function deleteHistoryEntry(id){
   saveHistory(loadHistory().filter(h=>h.id!==id));
   render();
 }
-function srText(p){
-  const sr = p.balls>0 ? (p.runs/p.balls*100).toFixed(2) : "0.00";
-  return `4s ${p.fours||0} · 6s ${p.sixes||0} · SR ${sr}`;
+function strikeRate(p){
+  return p.balls>0 ? (p.runs/p.balls*100).toFixed(2) : "0.00";
 }
 function dismissalText(p){
   if(p.retired) return "retired hurt";
@@ -1120,16 +1130,17 @@ function scorecardHtml(inning, label, inningIndex, extrasEnabled){
   const bats = battingList(inning);
   const bowlers = Object.entries(inning.bowlers).filter(([,f])=>f.balls>0);
   let batRows = bats.map(p=>`
-    <div class="bat-row">
-      <div class="bat-row-top">
-        <span class="bat-name">${esc(p.name)}${(!p.out && !p.retired) ? '<span class="not-out"></span>' : ""}${nameRefAttr(inningIndex, p)}</span>
-        <span class="bat-figs">${p.runs} (${p.balls})</span>
-      </div>
-      <div class="bat-row-sub">
-        <span>${dismissalText(p)}</span>
-        <span>${srText(p)}</span>
-      </div>
-    </div>
+    <tr>
+      <td>
+        <div class="bat-name">${esc(p.name)}${(!p.out && !p.retired) ? '<span class="not-out"></span>' : ""}${nameRefAttr(inningIndex, p)}</div>
+        <div class="bat-dismissal">${dismissalText(p)}</div>
+      </td>
+      <td class="num">${p.runs}</td>
+      <td class="num">${p.balls}</td>
+      <td class="num">${p.fours||0}</td>
+      <td class="num">${p.sixes||0}</td>
+      <td class="num">${strikeRate(p)}</td>
+    </tr>
   `).join("");
   let bowlRows = bowlers.map(([name,f])=>{
     const er = f.balls>0 ? (f.runs/(f.balls/6)).toFixed(2) : "0.00";
@@ -1146,8 +1157,11 @@ function scorecardHtml(inning, label, inningIndex, extrasEnabled){
   const fowRows = inning.fallOfWickets.map(f=>`<tr><td>${esc(f.name)}</td><td class="num">${f.atScore}/${f.wicketNo}</td><td class="num">${f.atOver||"—"}</td></tr>`).join("");
   return `
     <div class="sc-innings-bar"><span>${esc(teamName(inning.battingKey))}</span><span>${inning.runs}-${inning.wickets} (${oversText(inning.legalBalls)})</span></div>
-    <div class="bat-list">
-      ${batRows || '<div style="color:var(--ink-soft); font-size:13px">No batsmen recorded.</div>'}
+    <div class="scorecard-wrap">
+      <table class="scorecard">
+        <tr><th>Batsman</th><th class="num">R</th><th class="num">B</th><th class="num">4s</th><th class="num">6s</th><th class="num">SR</th></tr>
+        ${batRows || '<tr><td colspan="6" style="color:var(--ink-soft)">No batsmen recorded.</td></tr>'}
+      </table>
     </div>
     <div class="sc-meta-row"><span>Extras</span><span>(${extrasTotal}) ${extraParts.join(", ") || "—"}</span></div>
     <div class="sc-meta-row sc-total-row"><span>Total</span><span>${inning.runs}-${inning.wickets} (${oversText(inning.legalBalls)}) ${runRate}</span></div>
@@ -1173,9 +1187,12 @@ let lastFireworksMatchId = null;
 let navStack = [];
 let lastRenderedSnapshot = null;
 let suppressNavPush = false;
+const BACK_STACK_SCREENS = new Set(["welcome","menu","info","chat","history","history-detail"]);
 function render(){
   const screenChanged = !lastRenderedSnapshot || lastRenderedSnapshot.screen !== state.screen;
-  if(!suppressNavPush && lastRenderedSnapshot && screenChanged){
+  const safeForBackStack = screenChanged && lastRenderedSnapshot
+    && BACK_STACK_SCREENS.has(lastRenderedSnapshot.screen) && BACK_STACK_SCREENS.has(state.screen);
+  if(!suppressNavPush && safeForBackStack){
     navStack.push(lastRenderedSnapshot);
     history.pushState({navDepth: navStack.length}, "", location.href);
   }
@@ -1194,7 +1211,7 @@ function render(){
 }
 window.addEventListener("popstate", () => {
   const prev = navStack.pop();
-  if(prev){
+  if(prev && BACK_STACK_SCREENS.has(state.screen)){
     suppressNavPush = true;
     state = prev;
     save();
@@ -1951,9 +1968,10 @@ function resultScreen(){
   ` : "";
 
   const printHeader = `
-    <div class="print-only" style="margin-bottom:14px;">
-      <div style="font-weight:800; font-size:17px;">${esc(state.teamAName)} vs ${esc(state.teamBName)}</div>
-      <div style="font-size:11px; color:#444; margin-top:2px;">${state.oversLimit}-over match · ${esc(new Date().toLocaleDateString())}</div>
+    <div class="print-only sc-print-header">
+      <div class="sc-print-title">${esc(state.teamAName)} vs ${esc(state.teamBName)}</div>
+      <div class="sc-print-meta">${state.oversLimit}-over match &middot; ${esc(new Date().toLocaleDateString())}</div>
+      <div class="sc-print-brand">Cric Score</div>
     </div>
   `;
 
@@ -2017,9 +2035,10 @@ function historyDetailScreen(){
   const s = entry.fullState;
   const i1 = s.innings[0], i2 = s.innings[1];
   const printHeader = `
-    <div class="print-only" style="margin-bottom:14px;">
-      <div style="font-weight:800; font-size:17px;">${esc(entry.teamA)} vs ${esc(entry.teamB)}</div>
-      <div style="font-size:11px; color:#444; margin-top:2px;">${entry.oversLimit}-over match${entry.date ? " · "+esc(new Date(entry.date).toLocaleDateString()) : ""}</div>
+    <div class="print-only sc-print-header">
+      <div class="sc-print-title">${esc(entry.teamA)} vs ${esc(entry.teamB)}</div>
+      <div class="sc-print-meta">${entry.oversLimit}-over match${entry.date ? " &middot; "+esc(new Date(entry.date).toLocaleDateString()) : ""}</div>
+      <div class="sc-print-brand">Cric Score</div>
     </div>
   `;
   return `
