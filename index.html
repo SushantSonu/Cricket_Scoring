@@ -503,6 +503,24 @@
     border-radius:7px; padding:8px 10px; font-size:13px; font-weight:600; max-width:160px;
   }
 
+  .feedback-card{ text-align:center; }
+  .feedback-title{ font-weight:800; font-size:15px; }
+  .feedback-hint{ font-size:12.5px; color:var(--ink-soft); margin-top:2px; }
+  .star-row{ display:flex; justify-content:center; gap:6px; margin:14px 0 10px; }
+  .star-btn{
+    appearance:none; border:none; background:transparent; cursor:pointer;
+    font-size:30px; line-height:1; color:var(--line); padding:2px;
+    transition:transform .1s ease, color .1s ease;
+  }
+  .star-row:hover .star-btn{ color:var(--bail); }
+  .star-btn:hover{ transform:scale(1.15); }
+  .star-btn:active{ transform:scale(0.9); }
+  .feedback-dismiss{
+    appearance:none; border:none; background:transparent; cursor:pointer;
+    color:var(--ink-soft); font-size:12px; text-decoration:underline; padding:4px;
+  }
+  .feedback-dismiss:hover{ color:var(--ink); }
+
   .history-card{ display:flex; flex-direction:column; gap:6px; }
   .history-top{ display:flex; justify-content:space-between; align-items:baseline; gap:10px; }
   .history-teams{ font-weight:700; font-size:14.5px; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
@@ -647,6 +665,26 @@ function hasUnseenNotifications(){
 function goToNotifications(){
   localStorage.setItem(NOTIF_SEEN_KEY, "1");
   goToInfo("notifications");
+}
+const FEEDBACK_KEY = "gullyScorerFeedback_v1";
+const PLAY_STORE_URL = "https://play.google.com/store/apps/details?id=co.cricscore.twa";
+function loadFeedbackPref(){ try{ return JSON.parse(localStorage.getItem(FEEDBACK_KEY)) || {}; }catch(e){ return {}; } }
+function saveFeedbackPref(p){ localStorage.setItem(FEEDBACK_KEY, JSON.stringify(p)); }
+function shouldShowFeedbackPrompt(){ return !loadFeedbackPref().optedOut; }
+function rateApp(n){
+  saveFeedbackPref({ optedOut:true, lastRating:n });
+  if(n>=4){
+    window.open(PLAY_STORE_URL, "_blank", "noopener");
+  } else {
+    const subject = encodeURIComponent("Cric Score feedback");
+    const body = encodeURIComponent(`Rating: ${n}/5\n\nWhat could be better?\n`);
+    window.location.href = `mailto:cricscore@gmail.com?subject=${subject}&body=${body}`;
+  }
+  render();
+}
+function dismissFeedbackForever(){
+  saveFeedbackPref({ optedOut:true, lastRating:null });
+  render();
 }
 function pushUndo(){
   const snap = JSON.parse(JSON.stringify(state));
@@ -1975,6 +2013,17 @@ function resultScreen(){
     </div>
   `;
 
+  const feedbackCard = shouldShowFeedbackPrompt() ? `
+    <div class="card feedback-card no-print">
+      <div class="feedback-title">Enjoying Cric Score?</div>
+      <div class="feedback-hint">Tap a star to rate it.</div>
+      <div class="star-row">
+        ${[1,2,3,4,5].map(n=>`<button class="star-btn" onclick="rateApp(${n})" aria-label="${n} star${n>1?"s":""}">&#9733;</button>`).join("")}
+      </div>
+      <button class="feedback-dismiss" onclick="dismissFeedbackForever()">Don't ask again</button>
+    </div>
+  ` : "";
+
   return `
     <canvas id="fireworksCanvas" class="fireworks-canvas no-print"></canvas>
     <main>
@@ -1990,6 +2039,7 @@ function resultScreen(){
       ${momCard}
       <div class="card">${scorecardHtml(i1, "Innings 1", null, state.extrasEnabled)}</div>
       <div class="card">${scorecardHtml(i2, "Innings 2", null, state.extrasEnabled)}</div>
+      ${feedbackCard}
       <div class="no-print" style="display:flex; flex-direction:column; gap:8px;">
         <button class="btn btn-export" onclick="exportScorecard()">⬇ Export PDF</button>
         <button class="btn btn-primary" onclick="newMatch()">New match</button>
