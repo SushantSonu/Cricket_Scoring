@@ -830,8 +830,8 @@ function startSetup(){
   const aPlayers = parseInt(val("teamAPlayersInput"), 10);
   const bPlayers = parseInt(val("teamBPlayersInput"), 10);
   state.teamAName=a; state.teamBName=b; state.oversLimit=overs; state.formError="";
-  state.teamAPlayers = (aPlayers && aPlayers>=2) ? aPlayers : 11;
-  state.teamBPlayers = (bPlayers && bPlayers>=2) ? bPlayers : 11;
+  state.teamAPlayers = (aPlayers && aPlayers>=2) ? Math.min(aPlayers, 11) : 11;
+  state.teamBPlayers = (bPlayers && bPlayers>=2) ? Math.min(bPlayers, 11) : 11;
   state.matchId = (crypto.randomUUID ? crypto.randomUUID() : (Date.now()+"-"+Math.random().toString(36).slice(2)));
   state.matchDate = Date.now();
   state.screen="toss";
