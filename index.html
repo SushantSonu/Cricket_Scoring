@@ -606,7 +606,6 @@ function freshState(){
     screen: "setup",
     teamAName: "", teamBName: "",
     oversLimit: 6,
-    teamAPlayers: 11, teamBPlayers: 11, lastManStand: false,
     extrasEnabled: { ...ALL_EXTRAS_ON },
     inningsIndex: 0,
     innings: [null, null],
@@ -633,6 +632,7 @@ function freshInning(battingKey, bowlingKey){
     thisOverBalls:[],
     fallOfWickets:[],
     retired:[],
+    lastAvailableFlagged:false, soloMode:false, soloKey:null, soloStartWickets:0,
     ended:false, endReason:null
   };
 }
@@ -646,14 +646,15 @@ function migrateBatsman(b){
 function migrateState(s){
   if(!s) return s;
   if(!s.extrasEnabled) s.extrasEnabled = { ...ALL_EXTRAS_ON };
-  if(typeof s.teamAPlayers !== "number") s.teamAPlayers = 11;
-  if(typeof s.teamBPlayers !== "number") s.teamBPlayers = 11;
-  if(typeof s.lastManStand !== "boolean") s.lastManStand = false;
   (s.innings||[]).forEach(inning=>{
     if(!inning) return;
     if(inning.batsmen){ migrateBatsman(inning.batsmen.A); migrateBatsman(inning.batsmen.B); }
     if(!inning.retired) inning.retired = [];
     if(typeof inning.currentOverRuns !== "number") inning.currentOverRuns = 0;
+    if(typeof inning.lastAvailableFlagged !== "boolean") inning.lastAvailableFlagged = false;
+    if(typeof inning.soloMode !== "boolean") inning.soloMode = false;
+    if(inning.soloKey===undefined) inning.soloKey = null;
+    if(typeof inning.soloStartWickets !== "number") inning.soloStartWickets = 0;
     (inning.fallOfWickets||[]).forEach(f=>{
       migrateBatsman(f);
       if(f.bowler===undefined) f.bowler=null;
@@ -730,23 +731,32 @@ function oversText(legalBalls){ return Math.floor(legalBalls/6) + "." + (legalBa
 function currentInning(){ return state.innings[state.inningsIndex]; }
 function val(id){ const el=document.getElementById(id); return el ? el.value.trim() : ""; }
 
-function toggleStrike(inning){ inning.onStrike = inning.onStrike==="A" ? "B" : "A"; }
+function toggleStrike(inning){
+  if(inning.soloMode) return; // the lone survivor has no partner to rotate to
+  inning.onStrike = inning.onStrike==="A" ? "B" : "A";
+}
 function manualSwapStrike(){
   if(hasPending()) return;
+  if(currentInning().soloMode) return;
   if(!confirm("Swap the striker and non-striker?")) return;
   pushUndo();
   toggleStrike(currentInning());
   save(); render();
 }
-
-function wicketCap(battingKey){
-  const players = (battingKey==="A" ? state.teamAPlayers : state.teamBPlayers) || 11;
-  return state.lastManStand ? players : Math.max(players-1, 1);
+function maybeEnterSoloMode(inning, dismissedKey){
+  if(inning.soloMode || !inning.lastAvailableFlagged) return;
+  inning.soloMode = true;
+  inning.soloStartWickets = inning.wickets;
+  inning.lastAvailableFlagged = false;
+  inning.soloKey = otherKey(dismissedKey);
+  inning.onStrike = inning.soloKey;
 }
+
 function checkInningsEnd(inning){
   let ended=false, reason=null;
   if(inning.legalBalls >= state.oversLimit*6){ ended=true; reason="overs"; }
-  if(!ended && inning.wickets >= wicketCap(inning.battingKey)){ ended=true; reason="allout"; }
+  if(!ended && inning.wickets >= 10){ ended=true; reason="allout"; }
+  if(!ended && inning.soloMode && inning.wickets > inning.soloStartWickets){ ended=true; reason="allout"; }
   if(!ended && state.inningsIndex===1){
     const target = state.innings[0].runs+1;
     if(inning.runs >= target){ ended=true; reason="target"; }
@@ -820,6 +830,7 @@ function editOvers(){
 function hasPending(){
   const inning = currentInning();
   if(!inning) return true;
+  if(inning.soloMode) return !inning.batsmen[inning.soloKey].name || !inning.currentBowler;
   return !inning.batsmen.A.name || !inning.batsmen.B.name || !inning.currentBowler;
 }
 
@@ -827,11 +838,7 @@ function startSetup(){
   const a = val("teamAInput"), b = val("teamBInput"), overs = parseInt(val("oversInput"),10);
   if(!a || !b){ state.formError="Enter both team names."; save(); render(); return; }
   if(!overs || overs<1){ state.formError="Overs must be at least 1."; save(); render(); return; }
-  const aPlayers = parseInt(val("teamAPlayersInput"), 10);
-  const bPlayers = parseInt(val("teamBPlayersInput"), 10);
   state.teamAName=a; state.teamBName=b; state.oversLimit=Math.min(overs, 50); state.formError="";
-  state.teamAPlayers = (aPlayers && aPlayers>=2) ? Math.min(aPlayers, 11) : 11;
-  state.teamBPlayers = (bPlayers && bPlayers>=2) ? Math.min(bPlayers, 11) : 11;
   state.matchId = (crypto.randomUUID ? crypto.randomUUID() : (Date.now()+"-"+Math.random().toString(36).slice(2)));
   state.matchDate = Date.now();
   state.screen="toss";
@@ -846,9 +853,19 @@ function chooseBattingFirst(key){
   state.retireMenuOpen = false;
   save(); render();
 }
+function neededSlots(inning){
+  if(inning.soloMode){
+    return {
+      needA: inning.soloKey==="A" && !inning.batsmen.A.name,
+      needB: inning.soloKey==="B" && !inning.batsmen.B.name,
+      needBowler: !inning.currentBowler
+    };
+  }
+  return { needA: !inning.batsmen.A.name, needB: !inning.batsmen.B.name, needBowler: !inning.currentBowler };
+}
 function confirmEntries(){
   const inning = currentInning();
-  const needA = !inning.batsmen.A.name, needB = !inning.batsmen.B.name, needBowler = !inning.currentBowler;
+  const { needA, needB, needBowler } = neededSlots(inning);
   const a = needA ? val("entryA") : null;
   const b = needB ? val("entryB") : null;
   const bo = needBowler ? val("entryBowler") : null;
@@ -862,6 +879,10 @@ function confirmEntries(){
   if(needBowler){
     inning.currentBowler = bo;
     if(!inning.bowlers[bo]) inning.bowlers[bo] = { balls:0, runs:0, wickets:0, maidens:0 };
+  }
+  const lastPlayerEl = document.getElementById("lastPlayerCheckbox");
+  if((needA || needB) && lastPlayerEl && lastPlayerEl.checked){
+    inning.lastAvailableFlagged = true;
   }
   state.formError = "";
   save(); render();
@@ -987,6 +1008,7 @@ function addWicket(dismissalType, fielder){
     ones:b.ones, twos:b.twos, threes:b.threes, fours:b.fours, sixes:b.sixes
   });
   inning.thisOverBalls.push("W");
+  maybeEnterSoloMode(inning, key);
   afterLegalBall(inning);
   inning.batsmen[key] = emptyBatsman();
   finishAction();
@@ -1034,6 +1056,7 @@ function addRunOut(dismissedKey, fielder){
     ones:b.ones, twos:b.twos, threes:b.threes, fours:b.fours, sixes:b.sixes
   });
   inning.thisOverBalls.push("W");
+  maybeEnterSoloMode(inning, dismissedKey);
   afterLegalBall(inning);
   inning.batsmen[dismissedKey] = emptyBatsman();
   finishAction();
@@ -1104,12 +1127,8 @@ function toggleExtra(type){
   state.extrasEnabled[type] = !state.extrasEnabled[type];
   save(); render();
 }
-function toggleLastManStand(){
-  state.lastManStand = !state.lastManStand;
-  save(); render();
-}
 function syncSetupField(field, value){
-  if(field==="oversLimit" || field==="teamAPlayers" || field==="teamBPlayers"){
+  if(field==="oversLimit"){
     const n = parseInt(value, 10);
     if(n) state[field] = n;
   } else {
@@ -1597,7 +1616,7 @@ const INFO_CONTENT = {
       <p><b>Setting up a match</b></p>
       <ol>
         <li>From the home screen, tap <b>Start scoring</b>.</li>
-        <li>Enter both team names, the number of overs, and how many players are on each side (defaults to 11). If a side has fewer than 11, turn on <b>Allow last man stand</b> so their final batsman keeps going alone instead of the innings ending early — the usual gully rule.</li>
+        <li>Enter both team names and the number of overs.</li>
         <li>Choose which extras — wide, no ball, bye, leg bye — count in this match, then tap <b>Set overs &amp; continue</b>.</li>
         <li>Pick which team bats first.</li>
       </ol>
@@ -1608,10 +1627,10 @@ const INFO_CONTENT = {
         <li>Tap <b>Wicket</b> to say how the batsman got out — bowled, caught (you can name the fielder), LBW, stumped, hit wicket, or run out (either batsman; naming the fielder is optional).</li>
         <li>If someone's hurt and has to leave the field without being out, use <b>Retired hurt</b> — it doesn't count as a wicket, and a new batsman comes in the same way a wicket would ask for one.</li>
         <li>Tap either batsman's box, or the ⇆ button between them, to manually correct who's on strike — you'll be asked to confirm first.</li>
-        <li>After a wicket, you'll be asked for the incoming batsman's name before you can keep scoring. After every completed over, you'll be asked for the next bowler.</li>
+        <li>After a wicket, you'll be asked for the incoming batsman's name before you can keep scoring. If your side is short-handed and this incoming batsman is the very last one you have, tick <b>"This is our last available player"</b> on that entry — once their partner is also out, that batsman keeps going alone instead of the innings ending early. After every completed over, you'll be asked for the next bowler.</li>
         <li>Spotted a typo in a name? Tap the ✎ next to it — while scoring, or later on the innings-break scorecard — to fix it.</li>
         <li>Use <b>Undo</b> to reverse the last action if you tap the wrong thing, or <b>End innings</b> to close it early.</li>
-        <li>The innings also ends automatically once the batting side is all out — one wicket short of their player count, or exactly their player count if last man stand is on.</li>
+        <li>The innings ends automatically once the batting side is all out — the standard 10 wickets, or earlier if a "last available player" was flagged and they're then dismissed too.</li>
         <li>In the 1st innings only, tap the overs count in the top bar any time to change it — useful if a match needs to be shortened for time. If you reduce it below what's already been bowled, the innings ends immediately. It locks once the 2nd innings starts, since this app doesn't recalculate targets (no DLS method).</li>
         <li>Tap the 🏠 icon to return to the home screen without losing your place — a <b>Resume match</b> button will be waiting for you there.</li>
       </ol>
@@ -1628,7 +1647,7 @@ const INFO_CONTENT = {
       <p><b>मैच सेटअप करना</b></p>
       <ol>
         <li>होम स्क्रीन से <b>Start scoring</b> पर टैप करें।</li>
-        <li>दोनों टीमों के नाम, ओवरों की संख्या, और हर टीम में कितने खिलाड़ी हैं (डिफ़ॉल्ट 11) डालें। अगर किसी टीम में 11 से कम खिलाड़ी हैं, तो <b>Allow last man stand</b> ऑन करें ताकि आखिरी बैट्समैन इनिंग जल्दी खत्म होने के बजाय अकेले बैटिंग जारी रख सके — यह गली क्रिकेट का सामान्य नियम है।</li>
+        <li>दोनों टीमों के नाम और ओवरों की संख्या डालें।</li>
         <li>तय करें कि इस मैच में कौन से एक्स्ट्रा — वाइड, नो-बॉल, बाई, लेग बाई — गिने जाएंगे, फिर <b>Set overs &amp; continue</b> पर टैप करें।</li>
         <li>तय करें कि कौन सी टीम पहले बैटिंग करेगी।</li>
       </ol>
@@ -1639,10 +1658,10 @@ const INFO_CONTENT = {
         <li><b>Wicket</b> दबाकर तय करें कि बैट्समैन कैसे आउट हुआ — बोल्ड, कैच आउट (फील्डर का नाम भी डाल सकते हैं), एलबीडब्ल्यू, स्टंप्ड, हिट विकेट, या रन आउट (कोई भी बैट्समैन; फील्डर का नाम डालना ज़रूरी नहीं)।</li>
         <li>अगर कोई बैट्समैन चोटिल होकर आउट हुए बिना मैदान छोड़ता है, तो <b>Retired hurt</b> इस्तेमाल करें — यह विकेट नहीं गिनता, और नया बैट्समैन उसी तरह आता है जैसे विकेट गिरने पर आता है।</li>
         <li>किसी भी बैट्समैन के बॉक्स पर, या बीच वाले ⇆ बटन पर टैप करके स्ट्राइक मैन्युअली बदलें — पहले पुष्टि के लिए पूछा जाएगा।</li>
-        <li>विकेट गिरने के बाद, आगे स्कोर करने से पहले नए बैट्समैन का नाम पूछा जाएगा। हर ओवर पूरा होने पर, अगले बॉलर का नाम पूछा जाएगा।</li>
+        <li>विकेट गिरने के बाद, आगे स्कोर करने से पहले नए बैट्समैन का नाम पूछा जाएगा। अगर आपकी टीम के पास खिलाड़ी कम हैं और यह आने वाला बैट्समैन आपका आखिरी बचा हुआ खिलाड़ी है, तो उस एंट्री पर <b>"This is our last available player"</b> टिक करें — फिर उनके पार्टनर के आउट होने के बाद भी, वह बैट्समैन इनिंग जल्दी खत्म होने के बजाय अकेले बैटिंग जारी रखेगा। हर ओवर पूरा होने पर, अगले बॉलर का नाम पूछा जाएगा।</li>
         <li>किसी नाम में गलती दिखी? स्कोरिंग के दौरान, या बाद में इनिंग-ब्रेक स्कोरकार्ड पर भी, नाम के बगल में ✎ दबाकर उसे ठीक करें।</li>
         <li>गलत बटन दबने पर आखिरी एक्शन पलटने के लिए <b>Undo</b> दबाएं, या इनिंग जल्दी बंद करने के लिए <b>End innings</b> दबाएं।</li>
-        <li>बैटिंग टीम के ऑल आउट होने पर भी इनिंग अपने आप खत्म हो जाती है — उनके खिलाड़ियों की संख्या से एक कम विकेट पर, या last man stand ऑन होने पर उतने ही विकेट पर।</li>
+        <li>बैटिंग टीम के ऑल आउट होने पर इनिंग अपने आप खत्म हो जाती है — आम तौर पर 10 विकेट पर, या अगर किसी "आखिरी बचे खिलाड़ी" को फ्लैग किया गया था और वह भी आउट हो जाए, तो उससे पहले ही।</li>
         <li>सिर्फ पहली इनिंग में, टॉप बार में ओवरों की संख्या पर टैप करके उसे बदल सकते हैं — समय कम होने पर मैच छोटा करने के लिए। पहले से फेंकी गई बॉल्स से कम ओवर तय करने पर इनिंग उसी वक़्त खत्म हो जाती है। दूसरी इनिंग शुरू होने के बाद यह लॉक हो जाता है, क्योंकि यह ऐप टारगेट को फिर से नहीं जोड़ता (कोई DLS मेथड नहीं है)।</li>
         <li>अपनी जगह खोए बिना होम स्क्रीन पर जाने के लिए 🏠 आइकॉन दबाएं — वहां <b>Resume match</b> बटन आपका इंतज़ार करेगा।</li>
       </ol>
@@ -1895,7 +1914,7 @@ function setupScreen(){
         <button class="icon-btn" onclick="backToWelcome()" title="Home" aria-label="Home">🏠</button>
       </div>
       <h1 style="text-align:center;">New match</h1>
-      <p class="lede" style="text-align:center; margin-left:auto; margin-right:auto;">Team names, an overs count, and how many players a side — nothing else. Batsmen and the bowler go in once play actually starts.</p>
+      <p class="lede" style="text-align:center; margin-left:auto; margin-right:auto;">Two team names and an overs count — nothing else. Batsmen and the bowler go in once play actually starts.</p>
       <div class="card">
         <div class="field-row">
           <div class="field">
@@ -1910,21 +1929,6 @@ function setupScreen(){
         <div class="field">
           <label for="oversInput">Overs per innings</label>
           <input id="oversInput" type="number" min="1" max="50" step="1" value="${state.oversLimit}" oninput="syncSetupField('oversLimit', this.value)">
-        </div>
-        <div class="field-row">
-          <div class="field">
-            <label for="teamAPlayersInput">Team A players</label>
-            <input id="teamAPlayersInput" type="number" min="2" max="11" step="1" value="${state.teamAPlayers}" oninput="syncSetupField('teamAPlayers', this.value)">
-          </div>
-          <div class="field">
-            <label for="teamBPlayersInput">Team B players</label>
-            <input id="teamBPlayersInput" type="number" min="2" max="11" step="1" value="${state.teamBPlayers}" oninput="syncSetupField('teamBPlayers', this.value)">
-          </div>
-        </div>
-        <div class="field">
-          <label>Short-handed side?</label>
-          <button class="lang-btn ${state.lastManStand?"active":""}" style="flex:none; width:100%;" onclick="toggleLastManStand()">🏏 Allow last man stand</button>
-          <div class="entry-hint" style="margin:6px 0 0;">A side plays one batsman short of a full pair for the last wicket instead of ending the innings early — the usual gully rule when a team doesn't have 11 players.</div>
         </div>
         <div class="field">
           <label>Which extras count this match?</label>
@@ -1959,13 +1963,16 @@ function tossScreen(){
 }
 
 function entryFormHtml(inning){
-  const needA = !inning.batsmen.A.name, needB = !inning.batsmen.B.name, needBowler = !inning.currentBowler;
-  const isInningsStart = needA && needB && needBowler;
+  const { needA, needB, needBowler } = neededSlots(inning);
+  const isInningsStart = !inning.soloMode && needA && needB && needBowler;
   const needNewBatsman = needA || needB;
   let title, hint;
   if(isInningsStart){
     title = "Send the openers in";
     hint = "Enter the two openers and the first bowler to start this innings.";
+  } else if(inning.soloMode){
+    title = needBowler && needNewBatsman ? "Last man batting &amp; new over" : needNewBatsman ? "Last man batting" : "Over complete — who's bowling next?";
+    hint = needNewBatsman ? "No partner is available — enter the last man's name and they'll bat alone until they're out or overs run out." : "Enter the name of the bowler for this end.";
   } else if(needNewBatsman && needBowler){
     title = "New batsman &amp; new over";
     hint = "A wicket fell on the last ball of the over — enter the incoming batsman and the next bowler.";
@@ -1976,6 +1983,7 @@ function entryFormHtml(inning){
     title = "New batsman";
     hint = "Enter the name of the incoming batsman.";
   }
+  const offerLastPlayerCheckbox = needNewBatsman && !isInningsStart && !inning.soloMode;
   return `
     <div class="card entry-card">
       <div class="entry-title">${title}</div>
@@ -1983,6 +1991,12 @@ function entryFormHtml(inning){
       ${needA ? `<div class="field"><label for="entryA">Batsman — on strike</label><input id="entryA" type="text" maxlength="24" placeholder="Name"></div>` : ""}
       ${needB ? `<div class="field"><label for="entryB">Batsman — non-strike</label><input id="entryB" type="text" maxlength="24" placeholder="Name"></div>` : ""}
       ${needBowler ? `<div class="field"><label for="entryBowler">Bowler</label><input id="entryBowler" type="text" maxlength="24" placeholder="Name"></div>` : ""}
+      ${offerLastPlayerCheckbox ? `
+        <div class="field" style="flex-direction:row; align-items:center; gap:8px;">
+          <input type="checkbox" id="lastPlayerCheckbox" style="width:18px; height:18px; flex-shrink:0;">
+          <label for="lastPlayerCheckbox" style="text-transform:none; font-weight:600; font-size:13px; letter-spacing:0;">This is our last available player (no one left to send in after them)</label>
+        </div>
+      ` : ""}
       ${state.formError ? `<div class="error-text">${esc(state.formError)}</div>` : ""}
       <button class="btn btn-primary" onclick="confirmEntries()">${isInningsStart ? "Start innings" : "Confirm"}</button>
     </div>
@@ -2002,7 +2016,7 @@ function scoringScreen(){
     subLine = `<div class="sb-sub"><span>Target <b>${target}</b></span><span>Need <b>${needed}</b> off <b>${ballsLeft}</b> balls</span><span>RRR <b>${rrr}</b></span></div>`;
   }
 
-  const pending = !inning.batsmen.A.name || !inning.batsmen.B.name || !inning.currentBowler;
+  const pending = hasPending();
 
   const strikerKey = inning.onStrike, nonKey = otherKey(strikerKey);
   const striker = inning.batsmen[strikerKey], nonStriker = inning.batsmen[nonKey];
@@ -2012,10 +2026,11 @@ function scoringScreen(){
   const crewChips = ["A","B"].map(k=>{
     const b = inning.batsmen[k];
     const onStrike = inning.onStrike===k;
+    const isEmptyPartnerSlot = inning.soloMode && !b.name;
     return `
       <div class="crew-chip ${onStrike?'on-strike':''}" ${bothNamed ? `onclick="manualSwapStrike()" title="Tap to swap strike"` : ""}>
-        <div class="crew-label"><span class="dot ${onStrike?'':'hollow'}"></span>${onStrike?"On strike":"Non-strike"}</div>
-        <div class="crew-name">${b.name?esc(b.name):"—"}${b.name ? `<button class="edit-name-btn" onclick="event.stopPropagation(); renameBatsman(${state.inningsIndex},{type:'live',key:'${k}'})" title="Fix name" aria-label="Fix name">&#9998;</button>` : ""}</div>
+        <div class="crew-label"><span class="dot ${onStrike?'':'hollow'}"></span>${isEmptyPartnerSlot ? "No partner" : onStrike?"On strike":"Non-strike"}</div>
+        <div class="crew-name">${b.name?esc(b.name): isEmptyPartnerSlot ? "Last man batting alone" : "—"}${b.name ? `<button class="edit-name-btn" onclick="event.stopPropagation(); renameBatsman(${state.inningsIndex},{type:'live',key:'${k}'})" title="Fix name" aria-label="Fix name">&#9998;</button>` : ""}</div>
         <div class="crew-figs">${b.name? b.runs+" ("+b.balls+")" : ""}</div>
         ${b.name && (b.fours||b.sixes) ? `<div class="crew-boundaries">4s ${b.fours} · 6s ${b.sixes}</div>` : ""}
       </div>
@@ -2086,7 +2101,7 @@ function scoringScreen(){
       <button class="btn-choice" onclick="confirmDismissal('stumped')"><span>Stumped</span></button>
       <button class="btn-choice" onclick="confirmDismissal('hitwicket')"><span>Hit wicket</span></button>
       <button class="btn-choice" onclick="confirmRunOut('${strikerKey}')"><span>${esc(striker.name)} run out <span class="arrow">(striker)</span></span></button>
-      <button class="btn-choice" onclick="confirmRunOut('${nonKey}')"><span>${esc(nonStriker.name)} run out <span class="arrow">(non-striker)</span></span></button>
+      ${nonStriker.name ? `<button class="btn-choice" onclick="confirmRunOut('${nonKey}')"><span>${esc(nonStriker.name)} run out <span class="arrow">(non-striker)</span></span></button>` : ""}
       <button class="btn-ghost" style="width:100%; padding:11px 12px; margin-top:4px;" onclick="closeWicketMenu()">Cancel</button>
     </div>
   `;
@@ -2095,7 +2110,7 @@ function scoringScreen(){
       <div class="entry-title">Retired hurt — who's leaving the field?</div>
       <div class="entry-hint">Doesn't count as a wicket. A new batsman comes in next.</div>
       <button class="btn-choice" onclick="confirmRetireHurt('${strikerKey}')"><span>${esc(striker.name)} <span class="arrow">(striker)</span></span></button>
-      <button class="btn-choice" onclick="confirmRetireHurt('${nonKey}')"><span>${esc(nonStriker.name)} <span class="arrow">(non-striker)</span></span></button>
+      ${nonStriker.name ? `<button class="btn-choice" onclick="confirmRetireHurt('${nonKey}')"><span>${esc(nonStriker.name)} <span class="arrow">(non-striker)</span></span></button>` : ""}
       <button class="btn-ghost" style="width:100%; padding:11px 12px; margin-top:4px;" onclick="closeRetireMenu()">Cancel</button>
     </div>
   `;
@@ -2116,7 +2131,7 @@ function scoringScreen(){
         <div class="sb-batting">${esc(battingName)} batting · ${esc(bowlingName)} bowling</div>
         <div class="sb-main">
           <div class="sb-score">${inning.runs}/${inning.wickets}</div>
-          <div class="sb-overs">${oversText(inning.legalBalls)} / ${state.oversLimit} ov · CRR ${crr} · all out at ${wicketCap(inning.battingKey)}</div>
+          <div class="sb-overs">${oversText(inning.legalBalls)} / ${state.oversLimit} ov · CRR ${crr} · ${inning.soloMode ? "last man batting" : "all out at 10"}</div>
         </div>
         ${subLine}
       </div>
