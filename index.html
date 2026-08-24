@@ -408,12 +408,21 @@
   .sb-sub{ margin-top:10px; padding-top:10px; border-top:1px solid var(--card-line); font-size:13px; color:var(--ink-soft); display:flex; flex-wrap:wrap; gap:14px; font-variant-numeric:tabular-nums; }
   .sb-sub b{ color:var(--ink); font-weight:700; }
 
-  .crew{ display:flex; gap:10px; }
+  .crew{ display:flex; align-items:center; gap:8px; }
   .crew-chip{
     flex:1; background:var(--card); border:1px solid var(--card-line); border-radius:10px;
-    padding:12px 14px; min-width:0; transition:background .2s ease, border-color .2s ease;
+    padding:12px 14px; min-width:0; cursor:pointer; -webkit-tap-highlight-color:transparent;
+    transition:background .2s ease, border-color .2s ease;
   }
+  .crew-chip:hover{ border-color:var(--turf); }
   .crew-chip.on-strike{ border-color:var(--turf); box-shadow:inset 0 0 0 1px var(--turf); background:var(--turf-tint); }
+  .crew-swap-btn{
+    flex:0 0 auto; appearance:none; border:1px solid var(--card-line); background:var(--card);
+    color:var(--ink-soft); border-radius:50%; width:32px; height:32px; font-size:16px;
+    display:flex; align-items:center; justify-content:center; cursor:pointer;
+  }
+  .crew-swap-btn:hover{ border-color:var(--turf); color:var(--turf); }
+  .crew-swap-btn:active{ transform:scale(0.92); }
   .crew-label{ font-size:10.5px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:var(--ink-soft); display:flex; align-items:center; gap:6px; margin-bottom:5px; }
   .dot{ width:6px; height:6px; border-radius:50%; background:var(--turf); flex-shrink:0; }
   .dot.hollow{ background:transparent; border:1.5px solid var(--ink-soft); }
@@ -718,6 +727,12 @@ function currentInning(){ return state.innings[state.inningsIndex]; }
 function val(id){ const el=document.getElementById(id); return el ? el.value.trim() : ""; }
 
 function toggleStrike(inning){ inning.onStrike = inning.onStrike==="A" ? "B" : "A"; }
+function manualSwapStrike(){
+  if(hasPending()) return;
+  pushUndo();
+  toggleStrike(currentInning());
+  save(); render();
+}
 
 function checkInningsEnd(inning){
   let ended=false, reason=null;
@@ -1851,20 +1866,25 @@ function scoringScreen(){
   const strikerKey = inning.onStrike, nonKey = otherKey(strikerKey);
   const striker = inning.batsmen[strikerKey], nonStriker = inning.batsmen[nonKey];
 
+  const bothNamed = striker.name && nonStriker.name;
+  const swapBtnHtml = bothNamed ? `<button class="crew-swap-btn" onclick="manualSwapStrike()" title="Swap strike" aria-label="Swap strike">&#8646;</button>` : "";
+  const crewChips = ["A","B"].map(k=>{
+    const b = inning.batsmen[k];
+    const onStrike = inning.onStrike===k;
+    return `
+      <div class="crew-chip ${onStrike?'on-strike':''}" ${bothNamed ? `onclick="manualSwapStrike()" title="Tap to swap strike"` : ""}>
+        <div class="crew-label"><span class="dot ${onStrike?'':'hollow'}"></span>${onStrike?"On strike":"Non-strike"}</div>
+        <div class="crew-name">${b.name?esc(b.name):"—"}${b.name ? `<button class="edit-name-btn" onclick="event.stopPropagation(); renameBatsman(${state.inningsIndex},{type:'live',key:'${k}'})" title="Fix name" aria-label="Fix name">&#9998;</button>` : ""}</div>
+        <div class="crew-figs">${b.name? b.runs+" ("+b.balls+")" : ""}</div>
+        ${b.name && (b.fours||b.sixes) ? `<div class="crew-boundaries">4s ${b.fours} · 6s ${b.sixes}</div>` : ""}
+      </div>
+    `;
+  });
   const crewHtml = (striker.name || nonStriker.name) ? `
     <div class="crew">
-      ${["A","B"].map(k=>{
-        const b = inning.batsmen[k];
-        const onStrike = inning.onStrike===k;
-        return `
-          <div class="crew-chip ${onStrike?'on-strike':''}">
-            <div class="crew-label"><span class="dot ${onStrike?'':'hollow'}"></span>${onStrike?"On strike":"Non-strike"}</div>
-            <div class="crew-name">${b.name?esc(b.name):"—"}${b.name ? `<button class="edit-name-btn" onclick="renameBatsman(${state.inningsIndex},{type:'live',key:'${k}'})" title="Fix name" aria-label="Fix name">&#9998;</button>` : ""}</div>
-            <div class="crew-figs">${b.name? b.runs+" ("+b.balls+")" : ""}</div>
-            ${b.name && (b.fours||b.sixes) ? `<div class="crew-boundaries">4s ${b.fours} · 6s ${b.sixes}</div>` : ""}
-          </div>
-        `;
-      }).join("")}
+      ${crewChips[0]}
+      ${swapBtnHtml}
+      ${crewChips[1]}
     </div>
   ` : "";
 
