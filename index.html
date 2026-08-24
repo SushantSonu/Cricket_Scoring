@@ -802,7 +802,7 @@ function editOvers(){
   const raw = prompt(`Overs per innings (currently ${state.oversLimit}):`, state.oversLimit);
   if(raw === null) return;
   const n = parseInt(raw, 10);
-  if(!n || n < 1){ alert("Enter a valid number of overs (1 or more)."); return; }
+  if(!n || n < 1 || n > 50){ alert("Enter a valid number of overs (1 to 50)."); return; }
   pushUndo();
   state.oversLimit = n;
   if(inning && !inning.ended){
@@ -829,7 +829,7 @@ function startSetup(){
   if(!overs || overs<1){ state.formError="Overs must be at least 1."; save(); render(); return; }
   const aPlayers = parseInt(val("teamAPlayersInput"), 10);
   const bPlayers = parseInt(val("teamBPlayersInput"), 10);
-  state.teamAName=a; state.teamBName=b; state.oversLimit=overs; state.formError="";
+  state.teamAName=a; state.teamBName=b; state.oversLimit=Math.min(overs, 50); state.formError="";
   state.teamAPlayers = (aPlayers && aPlayers>=2) ? Math.min(aPlayers, 11) : 11;
   state.teamBPlayers = (bPlayers && bPlayers>=2) ? Math.min(bPlayers, 11) : 11;
   state.matchId = (crypto.randomUUID ? crypto.randomUUID() : (Date.now()+"-"+Math.random().toString(36).slice(2)));
@@ -909,27 +909,61 @@ function showBoundaryPopup(n){
 }
 function addExtra(type){
   if(hasPending()) return;
+  const raw = prompt("Total runs on this wide? (usually 1)", "1");
+  if(raw===null) return;
+  const n = parseInt(raw, 10);
+  if(!n || n<1) return;
   pushUndo();
   const inning = currentInning();
-  inning.runs += 1;
-  inning.extras[type] += 1;
-  inning.currentOverRuns = (inning.currentOverRuns||0) + 1;
-  inning.bowlers[inning.currentBowler].runs += 1;
-  inning.thisOverBalls.push(type==="wide" ? "wd" : "nb");
+  inning.runs += n;
+  inning.extras[type] += n;
+  inning.currentOverRuns = (inning.currentOverRuns||0) + n;
+  inning.bowlers[inning.currentBowler].runs += n;
+  inning.thisOverBalls.push("wd" + (n>1 ? n : ""));
+  if(n % 2 === 1) toggleStrike(inning);
   save(); render();
+}
+function addNoBall(){
+  if(hasPending()) return;
+  const raw = prompt("Runs off the bat on this no-ball? (0 if none)", "0");
+  if(raw===null) return;
+  const batRuns = parseInt(raw, 10);
+  if(isNaN(batRuns) || batRuns<0 || batRuns>6) return;
+  pushUndo();
+  const inning = currentInning();
+  const key = inning.onStrike;
+  inning.extras.noBall += 1;
+  inning.runs += 1 + batRuns;
+  inning.currentOverRuns = (inning.currentOverRuns||0) + 1 + batRuns;
+  inning.bowlers[inning.currentBowler].runs += 1 + batRuns;
+  inning.batsmen[key].runs += batRuns;
+  inning.batsmen[key].balls += 1;
+  if(batRuns===1) inning.batsmen[key].ones += 1;
+  else if(batRuns===2) inning.batsmen[key].twos += 1;
+  else if(batRuns===3) inning.batsmen[key].threes += 1;
+  else if(batRuns===4) inning.batsmen[key].fours += 1;
+  else if(batRuns===6) inning.batsmen[key].sixes += 1;
+  inning.thisOverBalls.push("nb" + (batRuns>0 ? "+"+batRuns : ""));
+  if(batRuns===1 || batRuns===3) toggleStrike(inning);
+  save(); render();
+  if(batRuns===4 || batRuns===6) showBoundaryPopup(batRuns);
 }
 function addByeType(type){
   if(hasPending()) return;
+  const raw = prompt(`Total runs on this ${type==="bye"?"bye":"leg bye"}? (usually 1)`, "1");
+  if(raw===null) return;
+  const n = parseInt(raw, 10);
+  if(!n || n<1) return;
   pushUndo();
   const inning = currentInning();
-  inning.runs += 1;
-  inning.extras[type] += 1;
+  inning.runs += n;
+  inning.extras[type] += n;
   inning.legalBalls += 1;
-  inning.currentOverRuns = (inning.currentOverRuns||0) + 1;
+  inning.currentOverRuns = (inning.currentOverRuns||0) + n;
   inning.bowlers[inning.currentBowler].balls += 1;
   inning.batsmen[inning.onStrike].balls += 1;
-  inning.thisOverBalls.push(type==="bye" ? "b" : "lb");
-  toggleStrike(inning);
+  inning.thisOverBalls.push((type==="bye" ? "b" : "lb") + (n>1 ? n : ""));
+  if(n % 2 === 1) toggleStrike(inning);
   afterLegalBall(inning);
   finishAction();
 }
@@ -1045,6 +1079,27 @@ function renameBatsman(inningIndex, ref){
   else inning.fallOfWickets[ref.idx].name = trimmed;
   save(); render();
 }
+function nameAtRef(inning, ref){
+  return ref.type==="live" ? inning.batsmen[ref.key].name
+    : ref.type==="retired" ? inning.retired[ref.idx].name
+    : inning.fallOfWickets[ref.idx].name;
+}
+function renameBatsmanMerged(inningIndex, refs){
+  const inning = state.innings[inningIndex];
+  if(!inning || !refs.length) return;
+  const current = nameAtRef(inning, refs[0]);
+  const next = prompt("Correct batsman name:", current);
+  if(next === null) return;
+  const trimmed = next.trim();
+  if(!trimmed || trimmed===current) return;
+  pushUndo();
+  refs.forEach(ref=>{
+    if(ref.type==="live") inning.batsmen[ref.key].name = trimmed;
+    else if(ref.type==="retired") inning.retired[ref.idx].name = trimmed;
+    else inning.fallOfWickets[ref.idx].name = trimmed;
+  });
+  save(); render();
+}
 function toggleExtra(type){
   state.extrasEnabled[type] = !state.extrasEnabled[type];
   save(); render();
@@ -1107,6 +1162,35 @@ function battingList(inning){
   (inning.retired||[]).forEach((r,idx)=>{ list.push({ ...r, out:false, retired:true, retiredIndex:idx }); });
   ["A","B"].forEach(k=>{ if(inning.batsmen[k].name) list.push({ ...inning.batsmen[k], out:false, liveKey:k }); });
   return list;
+}
+function mergedBattingList(inning){
+  const raw = battingList(inning);
+  const order = [];
+  const byName = {};
+  raw.forEach(p=>{
+    if(!byName[p.name]){
+      byName[p.name] = { name:p.name, runs:0, balls:0, fours:0, sixes:0, ones:0, twos:0, threes:0, refs:[], stints:[] };
+      order.push(p.name);
+    }
+    const g = byName[p.name];
+    g.runs += p.runs; g.balls += p.balls;
+    g.fours += (p.fours||0); g.sixes += (p.sixes||0);
+    g.ones += (p.ones||0); g.twos += (p.twos||0); g.threes += (p.threes||0);
+    const ref = p.out ? {type:"fow", idx:p.fowIndex} : p.retired ? {type:"retired", idx:p.retiredIndex} : {type:"live", key:p.liveKey};
+    g.refs.push(ref);
+    g.stints.push(p);
+  });
+  return order.map(name=>{
+    const g = byName[name];
+    const live = g.stints.find(s=>!s.out && !s.retired);
+    const lastDismissal = g.stints.slice().reverse().find(s=>s.out);
+    const rep = live || lastDismissal || g.stints[g.stints.length-1];
+    return {
+      name:g.name, runs:g.runs, balls:g.balls, fours:g.fours, sixes:g.sixes,
+      out:rep.out, retired:rep.retired, dismissalType:rep.dismissalType,
+      bowler:rep.bowler, fielder:rep.fielder, refs:g.refs
+    };
+  });
 }
 function allPlayers(s){
   s = s || state;
@@ -1206,12 +1290,11 @@ function dismissalText(p){
 }
 function nameRefAttr(inningIndex, p){
   if(inningIndex==null) return "";
-  const ref = p.out ? `{type:'fow',idx:${p.fowIndex}}` : p.retired ? `{type:'retired',idx:${p.retiredIndex}}` : `{type:'live',key:'${p.liveKey}'}`;
-  return ` <button class="edit-name-btn no-print" onclick="renameBatsman(${inningIndex},${ref})" title="Fix name" aria-label="Fix name">&#9998;</button>`;
+  return ` <button class="edit-name-btn no-print" onclick='renameBatsmanMerged(${inningIndex},${JSON.stringify(p.refs)})' title="Fix name" aria-label="Fix name">&#9998;</button>`;
 }
 function scorecardHtml(inning, label, inningIndex, extrasEnabled){
   extrasEnabled = extrasEnabled || ALL_EXTRAS_ON;
-  const bats = battingList(inning);
+  const bats = mergedBattingList(inning);
   const bowlers = Object.entries(inning.bowlers).filter(([,f])=>f.balls>0);
   let batRows = bats.map(p=>`
     <tr>
@@ -1514,22 +1597,28 @@ const INFO_CONTENT = {
       <p><b>Setting up a match</b></p>
       <ol>
         <li>From the home screen, tap <b>Start scoring</b>.</li>
-        <li>Enter both team names and the number of overs, then tap <b>Set overs &amp; continue</b>.</li>
+        <li>Enter both team names, the number of overs, and how many players are on each side (defaults to 11). If a side has fewer than 11, turn on <b>Allow last man stand</b> so their final batsman keeps going alone instead of the innings ending early — the usual gully rule.</li>
+        <li>Choose which extras — wide, no ball, bye, leg bye — count in this match, then tap <b>Set overs &amp; continue</b>.</li>
         <li>Pick which team bats first.</li>
       </ol>
       <p><b>Scoring an innings</b></p>
       <ol>
         <li>Enter the two opening batsmen and the opening bowler — this is the only time you name players, and it happens right when play starts, not before.</li>
-        <li>Tap a run button (0–6) for each legal delivery, or tag <b>Wide</b>, <b>No ball</b>, <b>Bye</b>, <b>Leg bye</b>, or <b>Wicket</b> as needed.</li>
+        <li>Tap a run button (0–6) for each legal delivery, or tag any extra you turned on. Wide, bye, and leg bye ask how many runs in total (usually 1) so you can record a boundary wide or a couple of run byes; no ball asks how many runs came off the bat, on top of the automatic 1-run penalty.</li>
+        <li>Tap <b>Wicket</b> to say how the batsman got out — bowled, caught (you can name the fielder), LBW, stumped, hit wicket, or run out (either batsman; naming the fielder is optional).</li>
+        <li>If someone's hurt and has to leave the field without being out, use <b>Retired hurt</b> — it doesn't count as a wicket, and a new batsman comes in the same way a wicket would ask for one.</li>
+        <li>Tap either batsman's box, or the ⇆ button between them, to manually correct who's on strike — you'll be asked to confirm first.</li>
         <li>After a wicket, you'll be asked for the incoming batsman's name before you can keep scoring. After every completed over, you'll be asked for the next bowler.</li>
-        <li>Use <b>Undo</b> to reverse the last ball if you tap the wrong thing, or <b>End innings</b> to close it early.</li>
+        <li>Spotted a typo in a name? Tap the ✎ next to it — while scoring, or later on the innings-break scorecard — to fix it.</li>
+        <li>Use <b>Undo</b> to reverse the last action if you tap the wrong thing, or <b>End innings</b> to close it early.</li>
+        <li>The innings also ends automatically once the batting side is all out — one wicket short of their player count, or exactly their player count if last man stand is on.</li>
         <li>In the 1st innings only, tap the overs count in the top bar any time to change it — useful if a match needs to be shortened for time. If you reduce it below what's already been bowled, the innings ends immediately. It locks once the 2nd innings starts, since this app doesn't recalculate targets (no DLS method).</li>
         <li>Tap the 🏠 icon to return to the home screen without losing your place — a <b>Resume match</b> button will be waiting for you there.</li>
       </ol>
       <p><b>Second innings &amp; finishing up</b></p>
       <ol>
         <li>Once the first innings ends, review its scorecard and tap <b>Start innings 2</b>. You'll enter new openers and a bowler the same way.</li>
-        <li>The chase shows your target, runs needed, and required run rate. The match ends the moment the target is reached or overs run out.</li>
+        <li>The chase shows your target, runs needed, and required run rate. The match ends the moment the target is reached, the side is all out, or overs run out.</li>
         <li>At the end, review the full scorecard, confirm or change the suggested Man of the Match, then <b>Export PDF</b> or head back to the home screen — the match is saved to your history either way.</li>
       </ol>
       <p><b>Match history</b></p>
@@ -1539,22 +1628,28 @@ const INFO_CONTENT = {
       <p><b>मैच सेटअप करना</b></p>
       <ol>
         <li>होम स्क्रीन से <b>Start scoring</b> पर टैप करें।</li>
-        <li>दोनों टीमों के नाम और ओवरों की संख्या डालें, फिर <b>Set overs &amp; continue</b> पर टैप करें।</li>
+        <li>दोनों टीमों के नाम, ओवरों की संख्या, और हर टीम में कितने खिलाड़ी हैं (डिफ़ॉल्ट 11) डालें। अगर किसी टीम में 11 से कम खिलाड़ी हैं, तो <b>Allow last man stand</b> ऑन करें ताकि आखिरी बैट्समैन इनिंग जल्दी खत्म होने के बजाय अकेले बैटिंग जारी रख सके — यह गली क्रिकेट का सामान्य नियम है।</li>
+        <li>तय करें कि इस मैच में कौन से एक्स्ट्रा — वाइड, नो-बॉल, बाई, लेग बाई — गिने जाएंगे, फिर <b>Set overs &amp; continue</b> पर टैप करें।</li>
         <li>तय करें कि कौन सी टीम पहले बैटिंग करेगी।</li>
       </ol>
       <p><b>इनिंग स्कोर करना</b></p>
       <ol>
         <li>दो ओपनिंग बैट्समैन और बॉलर के नाम डालें — यह इकलौता समय है जब आपको खिलाड़ियों के नाम डालने होते हैं, और यह खेल शुरू होने पर ही होता है, पहले से नहीं।</li>
-        <li>हर लीगल बॉल के लिए रन बटन (0–6) दबाएं, या ज़रूरत पड़ने पर <b>Wide</b>, <b>No ball</b>, <b>Bye</b>, <b>Leg bye</b>, या <b>Wicket</b> टैग करें।</li>
+        <li>हर लीगल बॉल के लिए रन बटन (0–6) दबाएं, या ऑन किया गया कोई भी एक्स्ट्रा टैग करें। वाइड, बाई और लेग बाई में कुल रन (आमतौर पर 1) पूछे जाते हैं, ताकि बाउंड्री वाइड या दो-तीन रन बाई भी दर्ज हो सकें; नो-बॉल में बैट से बने रन पूछे जाते हैं, जो 1 रन की पेनल्टी के ऊपर जुड़ते हैं।</li>
+        <li><b>Wicket</b> दबाकर तय करें कि बैट्समैन कैसे आउट हुआ — बोल्ड, कैच आउट (फील्डर का नाम भी डाल सकते हैं), एलबीडब्ल्यू, स्टंप्ड, हिट विकेट, या रन आउट (कोई भी बैट्समैन; फील्डर का नाम डालना ज़रूरी नहीं)।</li>
+        <li>अगर कोई बैट्समैन चोटिल होकर आउट हुए बिना मैदान छोड़ता है, तो <b>Retired hurt</b> इस्तेमाल करें — यह विकेट नहीं गिनता, और नया बैट्समैन उसी तरह आता है जैसे विकेट गिरने पर आता है।</li>
+        <li>किसी भी बैट्समैन के बॉक्स पर, या बीच वाले ⇆ बटन पर टैप करके स्ट्राइक मैन्युअली बदलें — पहले पुष्टि के लिए पूछा जाएगा।</li>
         <li>विकेट गिरने के बाद, आगे स्कोर करने से पहले नए बैट्समैन का नाम पूछा जाएगा। हर ओवर पूरा होने पर, अगले बॉलर का नाम पूछा जाएगा।</li>
-        <li>गलत बटन दबने पर आखिरी बॉल पलटने के लिए <b>Undo</b> दबाएं, या इनिंग जल्दी बंद करने के लिए <b>End innings</b> दबाएं।</li>
+        <li>किसी नाम में गलती दिखी? स्कोरिंग के दौरान, या बाद में इनिंग-ब्रेक स्कोरकार्ड पर भी, नाम के बगल में ✎ दबाकर उसे ठीक करें।</li>
+        <li>गलत बटन दबने पर आखिरी एक्शन पलटने के लिए <b>Undo</b> दबाएं, या इनिंग जल्दी बंद करने के लिए <b>End innings</b> दबाएं।</li>
+        <li>बैटिंग टीम के ऑल आउट होने पर भी इनिंग अपने आप खत्म हो जाती है — उनके खिलाड़ियों की संख्या से एक कम विकेट पर, या last man stand ऑन होने पर उतने ही विकेट पर।</li>
         <li>सिर्फ पहली इनिंग में, टॉप बार में ओवरों की संख्या पर टैप करके उसे बदल सकते हैं — समय कम होने पर मैच छोटा करने के लिए। पहले से फेंकी गई बॉल्स से कम ओवर तय करने पर इनिंग उसी वक़्त खत्म हो जाती है। दूसरी इनिंग शुरू होने के बाद यह लॉक हो जाता है, क्योंकि यह ऐप टारगेट को फिर से नहीं जोड़ता (कोई DLS मेथड नहीं है)।</li>
         <li>अपनी जगह खोए बिना होम स्क्रीन पर जाने के लिए 🏠 आइकॉन दबाएं — वहां <b>Resume match</b> बटन आपका इंतज़ार करेगा।</li>
       </ol>
       <p><b>दूसरी इनिंग और मैच खत्म करना</b></p>
       <ol>
         <li>पहली इनिंग खत्म होने पर, उसका स्कोरकार्ड देखें और <b>Start innings 2</b> दबाएं। नए ओपनर और बॉलर उसी तरह डालें।</li>
-        <li>चेज़ के दौरान टारगेट, ज़रूरी रन और ज़रूरी रन रेट दिखाई जाती है। टारगेट पूरा होते ही या ओवर खत्म होते ही मैच खत्म हो जाता है।</li>
+        <li>चेज़ के दौरान टारगेट, ज़रूरी रन और ज़रूरी रन रेट दिखाई जाती है। टारगेट पूरा होते ही, टीम ऑल आउट होते ही, या ओवर खत्म होते ही मैच खत्म हो जाता है।</li>
         <li>आखिर में, पूरा स्कोरकार्ड देखें, सुझाए गए Man of the Match की पुष्टि करें या बदलें, फिर <b>Export PDF</b> करें या होम स्क्रीन पर जाएं — मैच हर हाल में आपकी हिस्ट्री में सेव हो जाता है।</li>
       </ol>
       <p><b>मैच हिस्ट्री</b></p>
@@ -1578,7 +1673,7 @@ const INFO_CONTENT = {
       <p>The most common dismissals are <b>bowled</b> (the ball hits the stumps), <b>caught</b> (a fielder catches the ball before it bounces), <b>run out</b> (a fielder breaks the wicket before the batsman reaches it), <b>stumped</b> (the wicketkeeper breaks the stumps while the batsman is out of their crease), <b>LBW</b> — leg before wicket (the ball would have hit the stumps but struck the batsman's body first), and <b>hit wicket</b> (the batsman dislodges their own stumps).</p>
       <p><b>End of an innings</b></p>
       <p>An innings ends when all its overs are bowled, ten of the eleven batsmen are out, the batting side declares (Test cricket only), or — when chasing a target — the target is reached.</p>
-      <p style="color:var(--ink-soft); font-size:12.5px;">This is a general overview of the sport's laws. Cric Score itself uses a simplified scoring model suited to informal gully cricket: wickets are always credited to the batsman on strike, and run-outs, no-ball free hits, and running byes off a boundary aren't modelled.</p>
+      <p style="color:var(--ink-soft); font-size:12.5px;">This is a general overview of the sport's laws. Cric Score's own scoring model matches it closely: run-outs and catches let you record which fielder was involved, retiring hurt is tracked separately from a real dismissal, and an innings correctly ends once the batting side is all out (with an optional last-man-stand rule for a short-handed side). The one thing it doesn't model is the free hit that follows a no-ball.</p>
     `,
     bodyHi: `
       <p><b>बुनियादी बातें</b></p>
@@ -1593,7 +1688,7 @@ const INFO_CONTENT = {
       <p>सबसे सामान्य तरीके: <b>बोल्ड</b> (गेंद विकेट पर लगना), <b>कैच आउट</b> (फील्डर गेंद ज़मीन छूने से पहले पकड़ लेता है), <b>रन आउट</b> (बैट्समैन के क्रीज़ तक पहुंचने से पहले फील्डर विकेट तोड़ देता है), <b>स्टंप्ड</b> (बैट्समैन क्रीज़ से बाहर होने पर विकेटकीपर स्टंप्स तोड़ देता है), <b>एलबीडब्ल्यू</b> यानी लेग बिफोर विकेट (गेंद बैट से टकराने से पहले शरीर से लगती, और न लगती तो विकेट पर जाती), और <b>हिट विकेट</b> (बैट्समैन खुद अपने स्टंप्स गिरा देता है)।</p>
       <p><b>इनिंग का खत्म होना</b></p>
       <p>कोई इनिंग तब खत्म होती है जब उसके सारे ओवर पूरे हो जाएं, ग्यारह में से दस बैट्समैन आउट हो जाएं, बैटिंग टीम खुद इनिंग खत्म कर दे (सिर्फ टेस्ट क्रिकेट में), या किसी टारगेट का पीछा करते समय टारगेट पूरा हो जाए।</p>
-      <p style="color:var(--ink-soft); font-size:12.5px;">यह क्रिकेट के नियमों का एक सामान्य विवरण है। Cric Score खुद गली क्रिकेट के लिए एक आसान स्कोरिंग मॉडल इस्तेमाल करता है: विकेट हमेशा स्ट्राइक पर मौजूद बैट्समैन के नाम दर्ज होता है, और रन-आउट, नो-बॉल पर फ्री हिट, और बाउंड्री पर रनिंग बाई इसमें शामिल नहीं हैं।</p>
+      <p style="color:var(--ink-soft); font-size:12.5px;">यह क्रिकेट के नियमों का एक सामान्य विवरण है। Cric Score का अपना स्कोरिंग मॉडल इससे काफी मिलता है: रन-आउट और कैच में आप बता सकते हैं कि कौन सा फील्डर शामिल था, रिटायर्ड हर्ट को असली आउट से अलग ट्रैक किया जाता है, और बैटिंग टीम के ऑल आउट होने पर इनिंग सही तरीके से खत्म हो जाती है (शॉर्ट-हैंडेड टीम के लिए वैकल्पिक last-man-stand नियम के साथ)। सिर्फ एक चीज़ जो इसमें शामिल नहीं है, वह है नो-बॉल के बाद मिलने वाला फ्री हिट।</p>
     `
   },
   privacy: {
@@ -1949,7 +2044,7 @@ function scoringScreen(){
     let cls = "chip";
     if(b==="4"||b==="6") cls += " boundary";
     else if(b==="W") cls += " wicket";
-    else if(b==="wd"||b==="nb"||b==="b"||b==="lb") cls += " extra";
+    else if(b.startsWith("wd")||b.startsWith("nb")||b.startsWith("b")||b.startsWith("lb")) cls += " extra";
     return `<span class="${cls}">${b}</span>`;
   }).join("");
   const overStrip = `<div class="over-strip"><span class="over-label">This over</span><div class="ball-chips">${chips || '<span style="color:var(--ink-soft);font-size:12.5px">not started</span>'}</div></div>`;
@@ -1957,7 +2052,7 @@ function scoringScreen(){
   const extrasEnabled = state.extrasEnabled || ALL_EXTRAS_ON;
   const enabledExtras = [
     { key:"wide", label:"Wide", onclick:"addExtra('wide')" },
-    { key:"noBall", label:"No ball", onclick:"addExtra('noBall')" },
+    { key:"noBall", label:"No ball", onclick:"addNoBall()" },
     { key:"bye", label:"Bye", onclick:"addByeType('bye')" },
     { key:"legBye", label:"Leg bye", onclick:"addByeType('legBye')" }
   ].filter(e=>extrasEnabled[e.key]);
@@ -2021,7 +2116,7 @@ function scoringScreen(){
         <div class="sb-batting">${esc(battingName)} batting · ${esc(bowlingName)} bowling</div>
         <div class="sb-main">
           <div class="sb-score">${inning.runs}/${inning.wickets}</div>
-          <div class="sb-overs">${oversText(inning.legalBalls)} / ${state.oversLimit} ov · CRR ${crr}</div>
+          <div class="sb-overs">${oversText(inning.legalBalls)} / ${state.oversLimit} ov · CRR ${crr} · all out at ${wicketCap(inning.battingKey)}</div>
         </div>
         ${subLine}
       </div>
