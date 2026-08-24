@@ -187,7 +187,7 @@
   @media (prefers-reduced-motion: reduce){
     .boot-splash-title .line1, .boot-splash-title .line2{ animation: none; opacity: 1; transform: none; }
   }
-  .hero-menu-btn, .hero-bell-btn{
+  .hero-menu-btn, .hero-bell-btn, .hero-theme-btn{
     position: absolute;
     appearance: none; cursor: pointer;
     width: 40px; height: 40px; border-radius: 50%;
@@ -201,8 +201,9 @@
   }
   .hero-menu-btn{ top: 14px; left: 14px; }
   .hero-bell-btn{ top: 14px; right: 14px; }
+  .hero-theme-btn{ top: 14px; right: 64px; }
   .hero-menu-btn svg{ width: 18px; height: 18px; display: block; }
-  .hero-menu-btn:hover, .hero-bell-btn:hover{ background: rgba(255,255,255,0.28); }
+  .hero-menu-btn:hover, .hero-bell-btn:hover, .hero-theme-btn:hover{ background: rgba(255,255,255,0.28); }
   .hero-menu-btn:active, .hero-bell-btn:active{ transform: scale(0.92); }
   .hero-bell-btn .notif-dot{
     position: absolute; top: 6px; right: 6px;
@@ -621,7 +622,8 @@ function freshState(){
     lastOpenDate: null,
     infoKind: null,
     homeReturnScreen: null,
-    contentLang: "en"
+    contentLang: "en",
+    theme: "system"
   };
 }
 function emptyBatsman(){ return { name:null, runs:0, balls:0, out:false, ones:0, twos:0, threes:0, fours:0, sixes:0 }; }
@@ -652,6 +654,7 @@ function migrateBatsman(b){
 function migrateState(s){
   if(!s) return s;
   if(!s.extrasEnabled) s.extrasEnabled = { ...ALL_EXTRAS_ON };
+  if(s.theme!=="light" && s.theme!=="dark" && s.theme!=="system") s.theme = "system";
   (s.innings||[]).forEach(inning=>{
     if(!inning) return;
     if(inning.batsmen){ migrateBatsman(inning.batsmen.A); migrateBatsman(inning.batsmen.B); }
@@ -1192,8 +1195,12 @@ function startInnings2(){
 function exportScorecard(){ window.print(); }
 function newMatch(){
   if(!confirm("Start a new match? This clears the current scorecard.")) return;
+  const keepTheme = state.theme;
+  const keepContentLang = state.contentLang;
   localStorage.removeItem(STORAGE_KEY);
   state = freshState();
+  state.theme = keepTheme;
+  state.contentLang = keepContentLang;
   undoStack = [];
   save(); render();
 }
@@ -1422,6 +1429,7 @@ function render(){
   lastRenderedSnapshot = JSON.parse(JSON.stringify(state));
 
   document.documentElement.setAttribute("data-app-screen", state.screen);
+  applyTheme();
   document.getElementById("app").innerHTML = screenHtml();
   if(screenChanged) window.scrollTo(0, 0);
   if(state.screen==="result" && state.matchId && state.matchId!==lastFireworksMatchId){
@@ -1779,6 +1787,22 @@ function setContentLang(lang){
   state.contentLang = lang;
   save(); render();
 }
+const THEME_ORDER = ["system", "light", "dark"];
+const THEME_ICON = { system: "🌓", light: "☀️", dark: "🌙" };
+const THEME_LABEL = { system: "Match device", light: "Light", dark: "Dark" };
+function applyTheme(){
+  const theme = state.theme || "system";
+  if(theme==="system"){
+    document.documentElement.removeAttribute("data-theme");
+  } else {
+    document.documentElement.setAttribute("data-theme", theme);
+  }
+}
+function cycleTheme(){
+  const idx = THEME_ORDER.indexOf(state.theme || "system");
+  state.theme = THEME_ORDER[(idx+1) % THEME_ORDER.length];
+  save(); render();
+}
 function infoScreen(){
   const info = INFO_CONTENT[state.infoKind] || INFO_CONTENT.about;
   const lang = state.contentLang || "en";
@@ -1918,6 +1942,7 @@ function welcomeScreen(){
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg>
       </button>
       <button class="hero-bell-btn" onclick="goToNotifications()" title="Notifications" aria-label="Notifications">🔔${hasUnseenNotifications() ? '<span class="notif-dot"></span>' : ""}</button>
+      <button class="hero-theme-btn" onclick="cycleTheme()" title="Theme: ${esc(THEME_LABEL[state.theme||"system"])} (tap to change)" aria-label="Change theme">${THEME_ICON[state.theme||"system"]}</button>
       <img src="icon-512-maskable.png" alt="" class="hero-icon" width="128" height="128">
       <div class="hero-title">Cric Score</div>
       <div class="hero-tag">The fastest way to keep score on the street</div>
