@@ -606,6 +606,7 @@ function freshState(){
     screen: "setup",
     teamAName: "", teamBName: "",
     oversLimit: 6,
+    teamAPlayers: 11, teamBPlayers: 11, lastManStand: false,
     extrasEnabled: { ...ALL_EXTRAS_ON },
     inningsIndex: 0,
     innings: [null, null],
@@ -645,6 +646,9 @@ function migrateBatsman(b){
 function migrateState(s){
   if(!s) return s;
   if(!s.extrasEnabled) s.extrasEnabled = { ...ALL_EXTRAS_ON };
+  if(typeof s.teamAPlayers !== "number") s.teamAPlayers = 11;
+  if(typeof s.teamBPlayers !== "number") s.teamBPlayers = 11;
+  if(typeof s.lastManStand !== "boolean") s.lastManStand = false;
   (s.innings||[]).forEach(inning=>{
     if(!inning) return;
     if(inning.batsmen){ migrateBatsman(inning.batsmen.A); migrateBatsman(inning.batsmen.B); }
@@ -735,9 +739,14 @@ function manualSwapStrike(){
   save(); render();
 }
 
+function wicketCap(battingKey){
+  const players = (battingKey==="A" ? state.teamAPlayers : state.teamBPlayers) || 11;
+  return state.lastManStand ? players : Math.max(players-1, 1);
+}
 function checkInningsEnd(inning){
   let ended=false, reason=null;
   if(inning.legalBalls >= state.oversLimit*6){ ended=true; reason="overs"; }
+  if(!ended && inning.wickets >= wicketCap(inning.battingKey)){ ended=true; reason="allout"; }
   if(!ended && state.inningsIndex===1){
     const target = state.innings[0].runs+1;
     if(inning.runs >= target){ ended=true; reason="target"; }
@@ -818,7 +827,11 @@ function startSetup(){
   const a = val("teamAInput"), b = val("teamBInput"), overs = parseInt(val("oversInput"),10);
   if(!a || !b){ state.formError="Enter both team names."; save(); render(); return; }
   if(!overs || overs<1){ state.formError="Overs must be at least 1."; save(); render(); return; }
+  const aPlayers = parseInt(val("teamAPlayersInput"), 10);
+  const bPlayers = parseInt(val("teamBPlayersInput"), 10);
   state.teamAName=a; state.teamBName=b; state.oversLimit=overs; state.formError="";
+  state.teamAPlayers = (aPlayers && aPlayers>=2) ? aPlayers : 11;
+  state.teamBPlayers = (bPlayers && bPlayers>=2) ? bPlayers : 11;
   state.matchId = (crypto.randomUUID ? crypto.randomUUID() : (Date.now()+"-"+Math.random().toString(36).slice(2)));
   state.matchDate = Date.now();
   state.screen="toss";
@@ -1036,10 +1049,14 @@ function toggleExtra(type){
   state.extrasEnabled[type] = !state.extrasEnabled[type];
   save(); render();
 }
+function toggleLastManStand(){
+  state.lastManStand = !state.lastManStand;
+  save(); render();
+}
 function syncSetupField(field, value){
-  if(field==="oversLimit"){
+  if(field==="oversLimit" || field==="teamAPlayers" || field==="teamBPlayers"){
     const n = parseInt(value, 10);
-    if(n) state.oversLimit = n;
+    if(n) state[field] = n;
   } else {
     state[field] = value;
   }
@@ -1783,7 +1800,7 @@ function setupScreen(){
         <button class="icon-btn" onclick="backToWelcome()" title="Home" aria-label="Home">🏠</button>
       </div>
       <h1 style="text-align:center;">New match</h1>
-      <p class="lede" style="text-align:center; margin-left:auto; margin-right:auto;">Two team names and an overs count — nothing else. Batsmen and the bowler go in once play actually starts.</p>
+      <p class="lede" style="text-align:center; margin-left:auto; margin-right:auto;">Team names, an overs count, and how many players a side — nothing else. Batsmen and the bowler go in once play actually starts.</p>
       <div class="card">
         <div class="field-row">
           <div class="field">
@@ -1798,6 +1815,21 @@ function setupScreen(){
         <div class="field">
           <label for="oversInput">Overs per innings</label>
           <input id="oversInput" type="number" min="1" max="50" step="1" value="${state.oversLimit}" oninput="syncSetupField('oversLimit', this.value)">
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label for="teamAPlayersInput">Team A players</label>
+            <input id="teamAPlayersInput" type="number" min="2" max="11" step="1" value="${state.teamAPlayers}" oninput="syncSetupField('teamAPlayers', this.value)">
+          </div>
+          <div class="field">
+            <label for="teamBPlayersInput">Team B players</label>
+            <input id="teamBPlayersInput" type="number" min="2" max="11" step="1" value="${state.teamBPlayers}" oninput="syncSetupField('teamBPlayers', this.value)">
+          </div>
+        </div>
+        <div class="field">
+          <label>Short-handed side?</label>
+          <button class="lang-btn ${state.lastManStand?"active":""}" style="flex:none; width:100%;" onclick="toggleLastManStand()">🏏 Allow last man stand</button>
+          <div class="entry-hint" style="margin:6px 0 0;">A side plays one batsman short of a full pair for the last wicket instead of ending the innings early — the usual gully rule when a team doesn't have 11 players.</div>
         </div>
         <div class="field">
           <label>Which extras count this match?</label>
