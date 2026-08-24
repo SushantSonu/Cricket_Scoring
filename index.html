@@ -729,6 +729,7 @@ function val(id){ const el=document.getElementById(id); return el ? el.value.tri
 function toggleStrike(inning){ inning.onStrike = inning.onStrike==="A" ? "B" : "A"; }
 function manualSwapStrike(){
   if(hasPending()) return;
+  if(!confirm("Swap the striker and non-striker?")) return;
   pushUndo();
   toggleStrike(currentInning());
   save(); render();
@@ -828,6 +829,8 @@ function chooseBattingFirst(key){
   state.innings[0] = freshInning(key, bowlKey);
   state.inningsIndex = 0;
   state.screen = "scoring";
+  state.wicketMenuOpen = false;
+  state.retireMenuOpen = false;
   save(); render();
 }
 function confirmEntries(){
@@ -1069,6 +1072,8 @@ function startInnings2(){
   state.innings[1] = freshInning(otherKey(prevBattingKey), prevBattingKey);
   state.inningsIndex = 1;
   state.screen = "scoring";
+  state.wicketMenuOpen = false;
+  state.retireMenuOpen = false;
   save(); render();
 }
 function exportScorecard(){ window.print(); }
