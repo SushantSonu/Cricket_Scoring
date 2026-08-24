@@ -429,6 +429,11 @@
   .crew-name{ font-weight:700; font-size:14.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .crew-figs{ font-family:var(--font-mono); font-variant-numeric:tabular-nums; font-size:13px; color:var(--ink-soft); margin-top:2px; }
   .crew-boundaries{ font-family:var(--font-mono); font-variant-numeric:tabular-nums; font-size:11px; color:var(--turf-strong); margin-top:3px; }
+  .partnership-line{
+    text-align:center; font-size:12px; color:var(--ink-soft); margin-top:-2px;
+    font-variant-numeric:tabular-nums;
+  }
+  .partnership-line b{ color:var(--ink); font-family:var(--font-mono); }
 
   .bowler-row{ display:flex; align-items:center; justify-content:space-between; background:var(--card); border:1px solid var(--card-line); border-radius:10px; padding:12px 14px; gap:10px; }
   .bowler-info{ min-width:0; }
@@ -633,6 +638,7 @@ function freshInning(battingKey, bowlingKey){
     fallOfWickets:[],
     retired:[],
     lastAvailableFlagged:false, soloMode:false, soloKey:null, soloStartWickets:0,
+    partnershipStartRuns:0, partnershipStartBalls:0, partnershipHistory:[],
     ended:false, endReason:null
   };
 }
@@ -655,6 +661,9 @@ function migrateState(s){
     if(typeof inning.soloMode !== "boolean") inning.soloMode = false;
     if(inning.soloKey===undefined) inning.soloKey = null;
     if(typeof inning.soloStartWickets !== "number") inning.soloStartWickets = 0;
+    if(typeof inning.partnershipStartRuns !== "number") inning.partnershipStartRuns = inning.runs;
+    if(typeof inning.partnershipStartBalls !== "number") inning.partnershipStartBalls = inning.legalBalls;
+    if(!inning.partnershipHistory) inning.partnershipHistory = [];
     (inning.fallOfWickets||[]).forEach(f=>{
       migrateBatsman(f);
       if(f.bowler===undefined) f.bowler=null;
@@ -750,6 +759,16 @@ function maybeEnterSoloMode(inning, dismissedKey){
   inning.lastAvailableFlagged = false;
   inning.soloKey = otherKey(dismissedKey);
   inning.onStrike = inning.soloKey;
+}
+function currentPartnership(inning){
+  return { runs: inning.runs - inning.partnershipStartRuns, balls: inning.legalBalls - inning.partnershipStartBalls };
+}
+function recordPartnershipEnd(inning){
+  if(!inning.batsmen.A.name || !inning.batsmen.B.name) return; // no real pair to record (e.g. solo survivor's own dismissal)
+  const p = currentPartnership(inning);
+  inning.partnershipHistory.push({ runs: p.runs, balls: p.balls, players: [inning.batsmen.A.name, inning.batsmen.B.name] });
+  inning.partnershipStartRuns = inning.runs;
+  inning.partnershipStartBalls = inning.legalBalls;
 }
 
 function checkInningsEnd(inning){
@@ -1008,6 +1027,7 @@ function addWicket(dismissalType, fielder){
     ones:b.ones, twos:b.twos, threes:b.threes, fours:b.fours, sixes:b.sixes
   });
   inning.thisOverBalls.push("W");
+  recordPartnershipEnd(inning);
   maybeEnterSoloMode(inning, key);
   afterLegalBall(inning);
   inning.batsmen[key] = emptyBatsman();
@@ -1056,6 +1076,7 @@ function addRunOut(dismissedKey, fielder){
     ones:b.ones, twos:b.twos, threes:b.threes, fours:b.fours, sixes:b.sixes
   });
   inning.thisOverBalls.push("W");
+  recordPartnershipEnd(inning);
   maybeEnterSoloMode(inning, dismissedKey);
   afterLegalBall(inning);
   inning.batsmen[dismissedKey] = emptyBatsman();
@@ -1083,6 +1104,7 @@ function retireBatsman(key){
     name:b.name, runs:b.runs, balls:b.balls,
     ones:b.ones, twos:b.twos, threes:b.threes, fours:b.fours, sixes:b.sixes
   });
+  recordPartnershipEnd(inning);
   inning.batsmen[key] = emptyBatsman();
   save(); render();
 }
@@ -1341,6 +1363,12 @@ function scorecardHtml(inning, label, inningIndex, extrasEnabled){
   const oversDecimal = inning.legalBalls/6;
   const runRate = oversDecimal>0 ? (inning.runs/oversDecimal).toFixed(2) : "0.00";
   const fowRows = inning.fallOfWickets.map(f=>`<tr><td>${esc(f.name)}</td><td class="num">${f.atScore}/${f.wicketNo}</td><td class="num">${f.atOver||"—"}</td></tr>`).join("");
+  const partnerships = inning.partnershipHistory.map(p=>({ ...p, unbroken:false }));
+  if(inning.batsmen.A.name && inning.batsmen.B.name){
+    const cur = currentPartnership(inning);
+    partnerships.push({ runs:cur.runs, balls:cur.balls, players:[inning.batsmen.A.name, inning.batsmen.B.name], unbroken:true });
+  }
+  const partnershipRows = partnerships.map((p,i)=>`<tr><td>${i+1}. ${esc(p.players[0])} &amp; ${esc(p.players[1])}${p.unbroken?' <span style="color:var(--turf-strong); font-weight:700;">*</span>':''}</td><td class="num">${p.runs}</td><td class="num">${p.balls}</td></tr>`).join("");
   return `
     <div class="sc-innings-bar"><span>${esc(teamName(inning.battingKey))}</span><span>${inning.runs}-${inning.wickets} (${oversText(inning.legalBalls)})</span></div>
     <div class="scorecard-wrap">
@@ -1364,6 +1392,14 @@ function scorecardHtml(inning, label, inningIndex, extrasEnabled){
         <caption>${esc(label)} — Fall of wickets</caption>
         <tr><th>Batsman</th><th class="num">Score</th><th class="num">Over</th></tr>
         ${fowRows}
+      </table>
+    </div>` : ""}
+    ${partnerships.length ? `
+    <div class="scorecard-wrap" style="margin-top:16px">
+      <table class="scorecard">
+        <caption>${esc(label)} — Partnerships${partnerships.some(p=>p.unbroken) ? " (* unbroken)" : ""}</caption>
+        <tr><th>Pair</th><th class="num">Runs</th><th class="num">Balls</th></tr>
+        ${partnershipRows}
       </table>
     </div>` : ""}
   `;
@@ -1627,6 +1663,7 @@ const INFO_CONTENT = {
         <li>Tap <b>Wicket</b> to say how the batsman got out — bowled, caught (you can name the fielder), LBW, stumped, hit wicket, or run out (either batsman; naming the fielder is optional).</li>
         <li>If someone's hurt and has to leave the field without being out, use <b>Retired hurt</b> — it doesn't count as a wicket, and a new batsman comes in the same way a wicket would ask for one.</li>
         <li>Tap either batsman's box, or the ⇆ button between them, to manually correct who's on strike — you'll be asked to confirm first.</li>
+        <li>The current pair's partnership (runs and balls added together since they came to the crease) shows just below them, and every partnership of the innings — including the final, unbroken one — is listed on the scorecard too.</li>
         <li>After a wicket, you'll be asked for the incoming batsman's name before you can keep scoring. If your side is short-handed and this incoming batsman is the very last one you have, tick <b>"This is our last available player"</b> on that entry — once their partner is also out, that batsman keeps going alone instead of the innings ending early. After every completed over, you'll be asked for the next bowler.</li>
         <li>Spotted a typo in a name? Tap the ✎ next to it — while scoring, or later on the innings-break scorecard — to fix it.</li>
         <li>Use <b>Undo</b> to reverse the last action if you tap the wrong thing, or <b>End innings</b> to close it early.</li>
@@ -1658,6 +1695,7 @@ const INFO_CONTENT = {
         <li><b>Wicket</b> दबाकर तय करें कि बैट्समैन कैसे आउट हुआ — बोल्ड, कैच आउट (फील्डर का नाम भी डाल सकते हैं), एलबीडब्ल्यू, स्टंप्ड, हिट विकेट, या रन आउट (कोई भी बैट्समैन; फील्डर का नाम डालना ज़रूरी नहीं)।</li>
         <li>अगर कोई बैट्समैन चोटिल होकर आउट हुए बिना मैदान छोड़ता है, तो <b>Retired hurt</b> इस्तेमाल करें — यह विकेट नहीं गिनता, और नया बैट्समैन उसी तरह आता है जैसे विकेट गिरने पर आता है।</li>
         <li>किसी भी बैट्समैन के बॉक्स पर, या बीच वाले ⇆ बटन पर टैप करके स्ट्राइक मैन्युअली बदलें — पहले पुष्टि के लिए पूछा जाएगा।</li>
+        <li>मौजूदा जोड़ी की पार्टनरशिप (क्रीज़ पर आने के बाद से मिलकर बनाए गए रन और बॉल) उनके नीचे दिखाई जाती है, और इनिंग की हर पार्टनरशिप — आखिरी, बिना टूटी हुई पार्टनरशिप सहित — स्कोरकार्ड पर भी लिस्ट होती है।</li>
         <li>विकेट गिरने के बाद, आगे स्कोर करने से पहले नए बैट्समैन का नाम पूछा जाएगा। अगर आपकी टीम के पास खिलाड़ी कम हैं और यह आने वाला बैट्समैन आपका आखिरी बचा हुआ खिलाड़ी है, तो उस एंट्री पर <b>"This is our last available player"</b> टिक करें — फिर उनके पार्टनर के आउट होने के बाद भी, वह बैट्समैन इनिंग जल्दी खत्म होने के बजाय अकेले बैटिंग जारी रखेगा। हर ओवर पूरा होने पर, अगले बॉलर का नाम पूछा जाएगा।</li>
         <li>किसी नाम में गलती दिखी? स्कोरिंग के दौरान, या बाद में इनिंग-ब्रेक स्कोरकार्ड पर भी, नाम के बगल में ✎ दबाकर उसे ठीक करें।</li>
         <li>गलत बटन दबने पर आखिरी एक्शन पलटने के लिए <b>Undo</b> दबाएं, या इनिंग जल्दी बंद करने के लिए <b>End innings</b> दबाएं।</li>
@@ -2036,12 +2074,17 @@ function scoringScreen(){
       </div>
     `;
   });
+  const partnership = currentPartnership(inning);
+  const partnershipHtml = bothNamed ? `
+    <div class="partnership-line">Partnership <b>${partnership.runs} (${partnership.balls})</b></div>
+  ` : "";
   const crewHtml = (striker.name || nonStriker.name) ? `
     <div class="crew">
       ${crewChips[0]}
       ${swapBtnHtml}
       ${crewChips[1]}
     </div>
+    ${partnershipHtml}
   ` : "";
 
   const bowlerFigs = inning.currentBowler ? inning.bowlers[inning.currentBowler] : null;
