@@ -1033,6 +1033,15 @@ function toggleExtra(type){
   state.extrasEnabled[type] = !state.extrasEnabled[type];
   save(); render();
 }
+function syncSetupField(field, value){
+  if(field==="oversLimit"){
+    const n = parseInt(value, 10);
+    if(n) state.oversLimit = n;
+  } else {
+    state[field] = value;
+  }
+  save();
+}
 function endInningsManual(){
   if(!confirm("End this innings now?")) return;
   pushUndo();
@@ -1774,16 +1783,16 @@ function setupScreen(){
         <div class="field-row">
           <div class="field">
             <label for="teamAInput">Team A</label>
-            <input id="teamAInput" type="text" placeholder="e.g. Galli Tigers" maxlength="24" value="${esc(state.teamAName)}">
+            <input id="teamAInput" type="text" placeholder="e.g. Galli Tigers" maxlength="24" value="${esc(state.teamAName)}" oninput="syncSetupField('teamAName', this.value)">
           </div>
           <div class="field">
             <label for="teamBInput">Team B</label>
-            <input id="teamBInput" type="text" placeholder="e.g. Chowk Warriors" maxlength="24" value="${esc(state.teamBName)}">
+            <input id="teamBInput" type="text" placeholder="e.g. Chowk Warriors" maxlength="24" value="${esc(state.teamBName)}" oninput="syncSetupField('teamBName', this.value)">
           </div>
         </div>
         <div class="field">
           <label for="oversInput">Overs per innings</label>
-          <input id="oversInput" type="number" min="1" max="50" step="1" value="${state.oversLimit}">
+          <input id="oversInput" type="number" min="1" max="50" step="1" value="${state.oversLimit}" oninput="syncSetupField('oversLimit', this.value)">
         </div>
         <div class="field">
           <label>Which extras count this match?</label>
