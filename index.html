@@ -1032,7 +1032,9 @@ function addExtra(type){
   inning.currentOverRuns = (inning.currentOverRuns||0) + n;
   inning.bowlers[inning.currentBowler].runs += n;
   inning.thisOverBalls.push("wd" + (n>1 ? n : ""));
-  if(n % 2 === 1) toggleStrike(inning);
+  // n includes the automatic 1-run wide penalty, which nobody actually ran for -- only the runs
+  // actually run between the wickets (n-1) should decide whether strike rotates.
+  if((n-1) % 2 === 1) toggleStrike(inning);
   save(); render();
 }
 function addNoBall(){
