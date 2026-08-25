@@ -758,11 +758,11 @@ function rateApp(n){
     const body = encodeURIComponent(`Rating: ${n}/5\n\nWhat could be better?\n`);
     window.location.href = `mailto:cricscore@gmail.com?subject=${subject}&body=${body}`;
   }
-  render();
+  refreshCurrentScreen();
 }
 function dismissFeedbackForever(){
   saveFeedbackPref({ optedOut:true, lastRating:null });
-  render();
+  refreshCurrentScreen();
 }
 function pushUndo(){
   const snap = JSON.parse(JSON.stringify(state));
@@ -1577,7 +1577,15 @@ function detectLiveEvents(prev, next){
   return events;
 }
 let liveViewerPrevState = null;
+let liveViewerLastPayload = null;
 let lastLiveFireworksMatchId = null;
+function refreshCurrentScreen(){
+  if(liveViewMatchId){
+    renderLiveViewer(liveViewMatchId, liveViewerLastPayload, liveViewerLastPayload ? "ok" : "notfound");
+  } else {
+    render();
+  }
+}
 function startLiveViewer(matchId){
   applyTheme();
   document.documentElement.setAttribute("data-app-screen", "live");
@@ -1593,6 +1601,7 @@ function startLiveViewer(matchId){
         if(events.wicket) showWicketPopup();
         liveViewerPrevState = val.state;
       }
+      liveViewerLastPayload = val;
       renderLiveViewer(matchId, val, val ? "ok" : "notfound");
       if(val && val.state && val.state.screen==="result" && matchId!==lastLiveFireworksMatchId){
         lastLiveFireworksMatchId = matchId;
@@ -1652,12 +1661,23 @@ function liveViewerScreenHtml(matchId, payload, status){
           </div>
         </div>
       ` : "";
+      const feedbackCard = shouldShowFeedbackPrompt() ? `
+        <div class="card feedback-card no-print">
+          <div class="feedback-title">Enjoying Cric Score?</div>
+          <div class="feedback-hint">Tap a star to rate it.</div>
+          <div class="star-row">
+            ${[1,2,3,4,5].map(n=>`<button class="star-btn" onclick="rateApp(${n})" aria-label="${n} star${n>1?"s":""}">&#9733;</button>`).join("")}
+          </div>
+          <button class="feedback-dismiss" onclick="dismissFeedbackForever()">Don't ask again</button>
+        </div>
+      ` : "";
       html = `
         <canvas id="fireworksCanvas" class="fireworks-canvas no-print"></canvas>
         <main class="live-view">
           ${liveBadge}
           <div class="result-banner"><div class="rb-eyebrow">Full time</div><div class="rb-text">${esc(text)}</div></div>
           ${momCard}
+          ${feedbackCard}
           <div class="card">${scorecardHtml(s.innings[0], "Innings 1", null, s.extrasEnabled)}</div>
           <div class="card">${scorecardHtml(s.innings[1], "Innings 2", null, s.extrasEnabled)}</div>
         </main>${installBanner}`;
@@ -1672,9 +1692,18 @@ function liveViewerScreenHtml(matchId, payload, status){
         const rrr = ballsLeft>0 ? (needed*6/ballsLeft).toFixed(2) : "—";
         subLine = `<div class="sb-sub"><span>Target <b>${target}</b></span><span>Need <b>${needed}</b> off <b>${ballsLeft}</b> balls</span><span>RRR <b>${rrr}</b></span></div>`;
       }
-      const strikerKey = inning.onStrike, nonKey = otherKey(strikerKey);
-      const striker = inning.batsmen[strikerKey], nonStriker = inning.batsmen[nonKey];
-      const crewLine = (b, onStrike) => b.name ? `<div class="crew-chip ${onStrike?'on-strike':''}"><div class="crew-label"><span class="dot ${onStrike?'':'hollow'}"></span>${onStrike?"On strike":"Non-strike"}</div><div class="crew-name">${esc(b.name)}</div><div class="crew-figs">${b.runs} (${b.balls})</div></div>` : "";
+      const striker = inning.batsmen[inning.onStrike], nonStriker = inning.batsmen[otherKey(inning.onStrike)];
+      const crewLine = (k) => {
+        const b = inning.batsmen[k];
+        const onStrike = inning.onStrike===k;
+        const isEmptyPartnerSlot = inning.soloMode && !b.name;
+        return `<div class="crew-chip ${onStrike?'on-strike':''}">
+          <div class="crew-label"><span class="dot ${onStrike?'':'hollow'}"></span>${isEmptyPartnerSlot ? "No partner" : onStrike?"On strike":"Non-strike"}</div>
+          <div class="crew-name">${b.name?esc(b.name): isEmptyPartnerSlot ? "Last man batting alone" : "—"}</div>
+          <div class="crew-figs">${b.name? b.runs+" ("+b.balls+")" : ""}</div>
+          ${b.name && (b.fours||b.sixes) ? `<div class="crew-boundaries">4s ${b.fours} · 6s ${b.sixes}</div>` : ""}
+        </div>`;
+      };
       const bowlerFigs = inning.currentBowler && inning.bowlers[inning.currentBowler]
         ? (() => { const f = inning.bowlers[inning.currentBowler]; const er = f.balls>0 ? (f.runs/(f.balls/6)).toFixed(2) : "0.00"; return `<div class="bowler-line">${esc(inning.currentBowler)}: ${oversText(f.balls)}-${f.maidens||0}-${f.runs}-${f.wickets} (ER ${er})</div>`; })()
         : "";
@@ -1689,7 +1718,7 @@ function liveViewerScreenHtml(matchId, payload, status){
             </div>
             ${subLine}
           </div>
-          ${(striker.name || nonStriker.name) ? `<div class="crew">${crewLine(striker, true)}${crewLine(nonStriker, false)}</div>` : ""}
+          ${(striker.name || nonStriker.name) ? `<div class="crew">${crewLine("A")}${crewLine("B")}</div>` : ""}
           ${bowlerFigs}
           ${overStripHtml(inning)}
           <div class="card">${scorecardHtml(inning, s.inningsIndex===0 ? "Innings 1" : "Innings 2", null, s.extrasEnabled)}</div>
@@ -1933,14 +1962,14 @@ const INFO_CONTENT = {
       <p>Cric Score is a fast, no-fuss scorer for gully (street) cricket. Enter two team names and an overs count to start a match — there's no squad list to fill in beforehand.</p>
       <p>Batsmen and the bowler are only named the moment they actually step up to bat or bowl, so setup takes seconds, not minutes.</p>
       <p>Every match gets a full scorecard — runs, balls, boundaries, wickets, bowling figures — an automatically suggested Man of the Match, and a saved match history you can revisit or export as a PDF anytime.</p>
-      <p>It runs entirely in your browser. No account, no server, and once it's loaded once, no internet connection required.</p>
+      <p>Scoring itself runs entirely in your browser — no account needed, and once the app has loaded, everything keeps working with no internet connection at all. The one feature that does need the internet is sharing a match live with spectators, which syncs the score to a server so others can follow along on their own phone.</p>
       <p style="color:var(--ink-soft); font-size:12.5px;">Built by Sushant Kumar.</p>
     `,
     bodyHi: `
       <p>Cric Score गली (स्ट्रीट) क्रिकेट के लिए एक तेज़, आसान स्कोरर है। मैच शुरू करने के लिए सिर्फ दो टीमों के नाम और ओवरों की संख्या डालें — पहले से कोई स्क्वाड लिस्ट भरने की ज़रूरत नहीं।</p>
       <p>बैट्समैन और बॉलर के नाम तभी डाले जाते हैं जब वे असल में बैटिंग या बॉलिंग करने आते हैं, इसलिए सेटअप मिनटों में नहीं, सेकंडों में हो जाता है।</p>
       <p>हर मैच का पूरा स्कोरकार्ड मिलता है — रन, बॉल, बाउंड्री, विकेट, बॉलिंग फिगर — साथ ही अपने आप सुझाया गया Man of the Match, और एक सेव की गई मैच हिस्ट्री जिसे आप कभी भी देख सकते हैं या PDF के रूप में एक्सपोर्ट कर सकते हैं।</p>
-      <p>यह पूरी तरह आपके ब्राउज़र में चलता है। कोई अकाउंट नहीं, कोई सर्वर नहीं, और एक बार लोड होने के बाद इंटरनेट कनेक्शन की भी ज़रूरत नहीं।</p>
+      <p>स्कोरिंग पूरी तरह आपके ब्राउज़र में चलती है — कोई अकाउंट नहीं चाहिए, और एक बार ऐप लोड हो जाने पर बिना इंटरनेट के भी सब कुछ चलता रहता है। सिर्फ एक फीचर के लिए इंटरनेट चाहिए — मैच को स्पेक्टेटर्स के साथ लाइव शेयर करना — जो स्कोर को एक सर्वर पर सिंक करता है ताकि दूसरे लोग अपने फोन पर मैच फॉलो कर सकें।</p>
       <p style="color:var(--ink-soft); font-size:12.5px;">Sushant Kumar द्वारा बनाया गया।</p>
     `
   },
@@ -1949,6 +1978,8 @@ const INFO_CONTENT = {
     icon: "📖",
     tintVar: "--info-blue-tint",
     body: `
+      <p><b>Home screen</b></p>
+      <p>Tap the 🌓 icon at the top of the home screen to cycle the app's look between matching your device, light, and dark.</p>
       <p><b>Setting up a match</b></p>
       <ol>
         <li>From the home screen, tap <b>Start scoring</b>.</li>
@@ -1979,8 +2010,17 @@ const INFO_CONTENT = {
       </ol>
       <p><b>Match history</b></p>
       <p>Every finished match is saved automatically. Open it from the home screen or the menu to view or export any past scorecard, or delete ones you don't need anymore.</p>
+      <p><b>Sharing your match live</b></p>
+      <ol>
+        <li>While scoring, tap the 📡 icon in the top bar (the same button also appears on the innings-break and result screens) to share the match live. This generates a link and opens your phone's share sheet, so you can send it over WhatsApp, SMS, or however you like.</li>
+        <li>Anyone who opens that link sees the score update automatically as you score — the current over, both batsmen's figures, the bowler's figures, and the same 4/6 boundary pop-ups, the big "W" on a wicket, and the fireworks and Man of the Match at the end that you see while scoring. If they already have Cric Score installed, the link opens straight into the app; if not, it opens in their phone's browser instead, with a button to install the app.</li>
+        <li>The 📡 icon turns into a red 🔴 while sharing is on. Tap it again to stop — this removes the match from the server immediately, so the link stops working for anyone still watching.</li>
+        <li>Starting a new match automatically stops sharing the old one.</li>
+      </ol>
     `,
     bodyHi: `
+      <p><b>होम स्क्रीन</b></p>
+      <p>होम स्क्रीन के ऊपर 🌓 आइकॉन पर टैप करके ऐप का लुक डिवाइस जैसा, लाइट और डार्क के बीच बदल सकते हैं।</p>
       <p><b>मैच सेटअप करना</b></p>
       <ol>
         <li>होम स्क्रीन से <b>Start scoring</b> पर टैप करें।</li>
@@ -2011,6 +2051,13 @@ const INFO_CONTENT = {
       </ol>
       <p><b>मैच हिस्ट्री</b></p>
       <p>हर खत्म हुआ मैच अपने आप सेव हो जाता है। किसी भी पुराने स्कोरकार्ड को देखने, एक्सपोर्ट करने या हटाने के लिए इसे होम स्क्रीन या मेन्यू से खोलें।</p>
+      <p><b>मैच को लाइव शेयर करना</b></p>
+      <ol>
+        <li>स्कोरिंग करते समय, टॉप बार में 📡 आइकॉन पर टैप करें (यही बटन इनिंग-ब्रेक और रिज़ल्ट स्क्रीन पर भी दिखता है) मैच को लाइव शेयर करने के लिए। इससे एक लिंक बनता है और आपके फोन का शेयर शीट खुल जाता है, जिससे आप उसे WhatsApp, SMS या जैसे चाहें भेज सकते हैं।</li>
+        <li>वह लिंक खोलने वाले किसी भी व्यक्ति को स्कोर अपने आप अपडेट होता दिखता है — मौजूदा ओवर, दोनों बैट्समैन के आंकड़े, बॉलर के आंकड़े, और स्कोरिंग के दौरान दिखने वाले वही 4/6 बाउंड्री पॉपअप, विकेट पर बड़ा "W", और आखिर में क्रैकर्स और Man of the Match। अगर उनके पास पहले से Cric Score इंस्टॉल है, तो लिंक सीधे ऐप में खुलता है; नहीं तो यह उनके फोन के ब्राउज़र में खुलता है, साथ में ऐप इंस्टॉल करने का बटन भी दिखता है।</li>
+        <li>शेयरिंग ऑन होने पर 📡 आइकॉन लाल 🔴 में बदल जाता है। इसे रोकने के लिए दोबारा टैप करें — इससे मैच तुरंत सर्वर से हट जाता है, तो जो लोग अभी भी देख रहे हैं उनके लिए लिंक काम करना बंद कर देता है।</li>
+        <li>नया मैच शुरू करने पर पुराने मैच की शेयरिंग अपने आप बंद हो जाती है।</li>
+      </ol>
     `
   },
   rules: {
@@ -2053,14 +2100,16 @@ const INFO_CONTENT = {
     icon: "🔒",
     tintVar: "--info-teal-tint",
     body: `
-      <p>Cric Score doesn't have a server, an account system, or any analytics. Every match — live or in your history — is stored only in your browser's local storage, on your own device.</p>
-      <p>Nothing is uploaded, synced, or shared automatically. If you use the "continue on another device" link, your match data travels only inside that link itself, which you choose to send.</p>
-      <p>Clearing your browser's site data, or uninstalling the app, permanently removes everything — there's no backup copy anywhere else.</p>
+      <p>By default, Cric Score has no account system and no analytics, and every match — live or in your history — is stored only in your browser's local storage, on your own device. Nothing is uploaded, synced, or shared automatically.</p>
+      <p>If you use the "continue on another device" link, your match data travels only inside that link itself, which you choose to send.</p>
+      <p>The one exception is <b>Share live score</b>: turning it on uploads that match's score and figures to Firebase (a database service hosted by Google) for as long as sharing stays on, so spectators with the link can watch it update. Anyone with the link can view it; only your own device can update it, using an anonymous, unnamed session rather than a personal account. Turning sharing off removes the match from the server right away.</p>
+      <p>Clearing your browser's site data, or uninstalling the app, permanently removes everything stored locally — there's no backup copy anywhere else.</p>
     `,
     bodyHi: `
-      <p>Cric Score में कोई सर्वर नहीं है, कोई अकाउंट सिस्टम नहीं है, और कोई एनालिटिक्स भी नहीं है। हर मैच — चाहे लाइव हो या हिस्ट्री में — केवल आपके ब्राउज़र के लोकल स्टोरेज में, आपकी अपनी डिवाइस पर सेव होता है।</p>
-      <p>कुछ भी अपने आप अपलोड, सिंक या शेयर नहीं होता। अगर आप "continue on another device" लिंक इस्तेमाल करते हैं, तो आपका मैच डेटा सिर्फ उस लिंक के अंदर ही जाता है, जिसे भेजने का फैसला आप खुद लेते हैं।</p>
-      <p>अपने ब्राउज़र का साइट डेटा साफ़ करने या ऐप अनइंस्टॉल करने से सब कुछ हमेशा के लिए मिट जाता है — इसकी कोई बैकअप कॉपी कहीं और नहीं होती।</p>
+      <p>डिफ़ॉल्ट रूप से, Cric Score में कोई अकाउंट सिस्टम नहीं है और कोई एनालिटिक्स भी नहीं है, और हर मैच — चाहे लाइव हो या हिस्ट्री में — केवल आपके ब्राउज़र के लोकल स्टोरेज में, आपकी अपनी डिवाइस पर सेव होता है। कुछ भी अपने आप अपलोड, सिंक या शेयर नहीं होता।</p>
+      <p>अगर आप "continue on another device" लिंक इस्तेमाल करते हैं, तो आपका मैच डेटा सिर्फ उस लिंक के अंदर ही जाता है, जिसे भेजने का फैसला आप खुद लेते हैं।</p>
+      <p>एक अपवाद है <b>Share live score</b>: इसे ऑन करने पर उस मैच का स्कोर और आंकड़े Firebase (Google द्वारा होस्ट की गई एक डेटाबेस सर्विस) पर अपलोड होते हैं, जब तक शेयरिंग ऑन रहती है — ताकि लिंक वाले स्पेक्टेटर्स स्कोर को अपडेट होते देख सकें। लिंक वाला कोई भी व्यक्ति इसे देख सकता है; सिर्फ आपकी अपनी डिवाइस ही इसे अपडेट कर सकती है, क्योंकि इसके लिए एक अनाम (anonymous) सेशन इस्तेमाल होता है, न कि कोई पर्सनल अकाउंट। शेयरिंग बंद करते ही मैच सर्वर से तुरंत हट जाता है।</p>
+      <p>अपने ब्राउज़र का साइट डेटा साफ़ करने या ऐप अनइंस्टॉल करने से लोकल स्टोरेज में सेव सब कुछ हमेशा के लिए मिट जाता है — इसकी कोई बैकअप कॉपी कहीं और नहीं होती।</p>
     `
   },
   contact: {
