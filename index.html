@@ -707,6 +707,7 @@ function migrateState(s){
     if(inning.batsmen){ migrateBatsman(inning.batsmen.A); migrateBatsman(inning.batsmen.B); }
     if(!inning.retired) inning.retired = [];
     if(!inning.fallOfWickets) inning.fallOfWickets = [];
+    if(!inning.thisOverBalls) inning.thisOverBalls = [];
     if(typeof inning.currentOverRuns !== "number") inning.currentOverRuns = 0;
     if(typeof inning.lastAvailableFlagged !== "boolean") inning.lastAvailableFlagged = false;
     if(typeof inning.soloMode !== "boolean") inning.soloMode = false;
@@ -789,6 +790,16 @@ function matchResult(s){
   return { text:"Match tied", tied:true };
 }
 function otherKey(key){ return key==="A" ? "B" : "A"; }
+function overStripHtml(inning){
+  const chips = (inning.thisOverBalls||[]).map(b=>{
+    let cls = "chip";
+    if(b==="4"||b==="6") cls += " boundary";
+    else if(b==="W") cls += " wicket";
+    else if(b.startsWith("wd")||b.startsWith("nb")||b.startsWith("b")||b.startsWith("lb")) cls += " extra";
+    return `<span class="${cls}">${b}</span>`;
+  }).join("");
+  return `<div class="over-strip"><span class="over-label">This over</span><div class="ball-chips">${chips || '<span style="color:var(--ink-soft);font-size:12.5px">not started</span>'}</div></div>`;
+}
 function oversText(legalBalls){ return Math.floor(legalBalls/6) + "." + (legalBalls%6); }
 function currentInning(){ return state.innings[state.inningsIndex]; }
 function val(id){ const el=document.getElementById(id); return el ? el.value.trim() : ""; }
@@ -1626,6 +1637,7 @@ function liveViewerScreenHtml(matchId, payload, status){
           </div>
           ${(striker.name || nonStriker.name) ? `<div class="crew">${crewLine(striker, true)}${crewLine(nonStriker, false)}</div>` : ""}
           ${bowlerFigs}
+          ${overStripHtml(inning)}
           <div class="card">${scorecardHtml(inning, s.inningsIndex===0 ? "Innings 1" : "Innings 2", null, s.extrasEnabled)}</div>
           ${s.inningsIndex===1 && s.innings[0] ? `<div class="card">${scorecardHtml(s.innings[0], "Innings 1", null, s.extrasEnabled)}</div>` : ""}
         </main>${installBanner}`;
@@ -2349,14 +2361,7 @@ function scoringScreen(){
     </div>
   ` : "";
 
-  const chips = inning.thisOverBalls.map(b=>{
-    let cls = "chip";
-    if(b==="4"||b==="6") cls += " boundary";
-    else if(b==="W") cls += " wicket";
-    else if(b.startsWith("wd")||b.startsWith("nb")||b.startsWith("b")||b.startsWith("lb")) cls += " extra";
-    return `<span class="${cls}">${b}</span>`;
-  }).join("");
-  const overStrip = `<div class="over-strip"><span class="over-label">This over</span><div class="ball-chips">${chips || '<span style="color:var(--ink-soft);font-size:12.5px">not started</span>'}</div></div>`;
+  const overStrip = overStripHtml(inning);
 
   const extrasEnabled = state.extrasEnabled || ALL_EXTRAS_ON;
   const enabledExtras = [
