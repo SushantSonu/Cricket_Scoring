@@ -147,6 +147,25 @@
     display:flex; align-items:center; justify-content:center; cursor:pointer;
   }
   .icon-btn:hover{ border-color:var(--ink-soft); color:var(--ink); }
+  .icon-btn.live-active{ border-color:#e0362f; color:#e0362f; }
+
+  .live-view{ padding-bottom:40px; }
+  .live-badge{
+    display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:700;
+    letter-spacing:0.04em; color:#e0362f; margin-bottom:12px;
+  }
+  .live-dot{
+    width:8px; height:8px; border-radius:50%; background:#e0362f;
+    animation: live-pulse 1.4s ease-in-out infinite;
+  }
+  @keyframes live-pulse{ 0%,100%{ opacity:1; } 50%{ opacity:0.35; } }
+  .live-install-banner{
+    position: sticky; bottom: 0; display:flex; align-items:center; justify-content:space-between;
+    gap:12px; padding:12px 16px; background:var(--card); border-top:1px solid var(--card-line);
+    font-size:13px;
+  }
+  .live-install-banner .btn-ghost{ padding:8px 14px; white-space:nowrap; }
+  .bowler-line{ font-size:13px; color:var(--ink-soft); margin:4px 0 12px; }
 
   .hero{
     position: relative;
@@ -580,8 +599,22 @@
 
 <div class="shell" id="app"><div class="boot-splash" id="bootSplash" title="Tap to skip"><div class="boot-splash-img"><div class="boot-splash-title"><div class="line1">Cric</div><div class="line2">Score</div></div></div></div></div>
 
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-database-compat.js"></script>
 <script>
 const STORAGE_KEY = "gullyScorerState_v1";
+// Firebase project config is not a secret -- access is governed by the Realtime Database
+// security rules (see .well-known-adjacent setup notes), not by hiding this object.
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyCA7TaQnxf5F7Q5QX3S3E2a8KCxNweANbw",
+  authDomain: "cricscore-af671.firebaseapp.com",
+  databaseURL: "https://cricscore-af671-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "cricscore-af671",
+  storageBucket: "cricscore-af671.firebasestorage.app",
+  messagingSenderId: "547483677521",
+  appId: "1:547483677521:web:a10c59ee4e1679865dd970"
+};
 const ALL_EXTRAS_ON = { wide:true, noBall:true, bye:true, legBye:true };
 function tryLoadFromHash(){
   if(!location.hash || location.hash.indexOf("state=")===-1) return null;
@@ -591,9 +624,14 @@ function tryLoadFromHash(){
     return migrateState(parsed);
   }catch(e){ return null; }
 }
+function getLiveViewMatchId(){
+  try{ return new URLSearchParams(location.search).get("live"); }catch(e){ return null; }
+}
+const liveViewMatchId = getLiveViewMatchId();
 const hashImport = tryLoadFromHash();
 let state = hashImport || load() || { ...freshState(), screen: "welcome" };
 let undoStack = [];
+let liveSyncTimer = null;
 if(hashImport){
   history.replaceState(null, "", location.pathname + location.search);
   save();
@@ -623,7 +661,9 @@ function freshState(){
     infoKind: null,
     homeReturnScreen: null,
     contentLang: "en",
-    theme: "system"
+    theme: "system",
+    liveMatchId: null,
+    liveSharing: false
   };
 }
 function emptyBatsman(){ return { name:null, runs:0, balls:0, out:false, ones:0, twos:0, threes:0, fours:0, sixes:0 }; }
@@ -645,7 +685,7 @@ function freshInning(battingKey, bowlingKey){
   };
 }
 
-function save(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+function save(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); scheduleLiveSync(); }
 function migrateBatsman(b){
   if(!b) return b;
   ["ones","twos","threes","fours","sixes"].forEach(k=>{ if(typeof b[k]!=="number") b[k]=0; });
@@ -655,10 +695,18 @@ function migrateState(s){
   if(!s) return s;
   if(!s.extrasEnabled) s.extrasEnabled = { ...ALL_EXTRAS_ON };
   if(s.theme!=="light" && s.theme!=="dark" && s.theme!=="system") s.theme = "system";
-  (s.innings||[]).forEach(inning=>{
+  if(typeof s.liveMatchId!=="string") s.liveMatchId = null;
+  if(typeof s.liveSharing!=="boolean") s.liveSharing = false;
+  // Firebase Realtime Database silently drops empty arrays/objects and null values on write,
+  // so data round-tripped through the live-share feature can arrive with these fields missing
+  // even though every locally-created inning always has them. Pad them back in on the way in.
+  if(!Array.isArray(s.innings)) s.innings = [];
+  while(s.innings.length<2) s.innings.push(null);
+  s.innings.forEach(inning=>{
     if(!inning) return;
     if(inning.batsmen){ migrateBatsman(inning.batsmen.A); migrateBatsman(inning.batsmen.B); }
     if(!inning.retired) inning.retired = [];
+    if(!inning.fallOfWickets) inning.fallOfWickets = [];
     if(typeof inning.currentOverRuns !== "number") inning.currentOverRuns = 0;
     if(typeof inning.lastAvailableFlagged !== "boolean") inning.lastAvailableFlagged = false;
     if(typeof inning.soloMode !== "boolean") inning.soloMode = false;
@@ -667,14 +715,16 @@ function migrateState(s){
     if(typeof inning.partnershipStartRuns !== "number") inning.partnershipStartRuns = inning.runs;
     if(typeof inning.partnershipStartBalls !== "number") inning.partnershipStartBalls = inning.legalBalls;
     if(!inning.partnershipHistory) inning.partnershipHistory = [];
-    (inning.fallOfWickets||[]).forEach(f=>{
+    if(!inning.bowlers) inning.bowlers = {};
+    if(!inning.extras) inning.extras = { bye:0, legBye:0, wide:0, noBall:0 };
+    inning.fallOfWickets.forEach(f=>{
       migrateBatsman(f);
       if(f.bowler===undefined) f.bowler=null;
       if(f.atOver===undefined) f.atOver=null;
       if(f.dismissalType===undefined) f.dismissalType = f.bowler==="run out" ? "runout" : null;
       if(f.fielder===undefined) f.fielder=null;
     });
-    Object.values(inning.bowlers||{}).forEach(bf=>{
+    Object.values(inning.bowlers).forEach(bf=>{
       if(typeof bf.maidens !== "number") bf.maidens = 0;
     });
   });
@@ -1182,6 +1232,80 @@ function shareTransferLink(){
     prompt("Copy this link and open it on your other device:", link);
   }
 }
+let firebaseApp = null;
+function getFirebaseApp(){
+  if(!firebaseApp && window.firebase) firebaseApp = firebase.initializeApp(FIREBASE_CONFIG);
+  return firebaseApp;
+}
+let anonAuthPromise = null;
+function ensureAnonAuth(){
+  getFirebaseApp();
+  if(!anonAuthPromise){
+    anonAuthPromise = new Promise((resolve, reject)=>{
+      firebase.auth().onAuthStateChanged(user=>{ if(user) resolve(user.uid); });
+      firebase.auth().signInAnonymously().catch(reject);
+    });
+  }
+  return anonAuthPromise;
+}
+function genMatchId(){
+  const chars = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ"; // no 0/O/1/I/L, easy to read aloud
+  let id = "";
+  for(let i=0; i<6; i++) id += chars[Math.floor(Math.random()*chars.length)];
+  return id;
+}
+function buildLiveSnapshot(){
+  const clone = JSON.parse(JSON.stringify(state));
+  delete clone.liveMatchId;
+  delete clone.liveSharing;
+  return clone;
+}
+function pushLiveSnapshot(){
+  if(!state.liveSharing || !state.liveMatchId) return Promise.resolve();
+  return ensureAnonAuth().then(uid=>{
+    return firebase.database().ref("matches/"+state.liveMatchId).update({
+      ownerUid: uid,
+      updatedAt: firebase.database.ServerValue.TIMESTAMP,
+      state: buildLiveSnapshot()
+    });
+  });
+}
+function scheduleLiveSync(){
+  if(!state.liveSharing || !state.liveMatchId) return;
+  clearTimeout(liveSyncTimer);
+  liveSyncTimer = setTimeout(()=>{ pushLiveSnapshot().catch(()=>{}); }, 400);
+}
+function buildLiveShareLink(matchId){
+  return location.origin + location.pathname + "?live=" + matchId;
+}
+function shareLiveScore(){
+  if(state.liveSharing && state.liveMatchId){
+    if(!confirm("Stop sharing this match live? Spectators with the link will no longer see updates.")) return;
+    stopLiveSharing();
+    return;
+  }
+  state.liveMatchId = state.liveMatchId || genMatchId();
+  state.liveSharing = true;
+  save(); render();
+  pushLiveSnapshot().catch(()=>{ alert("Couldn't start live sharing -- check your internet connection and try again."); });
+  const link = buildLiveShareLink(state.liveMatchId);
+  const shareText = `Follow ${state.teamAName||"Team A"} vs ${state.teamBName||"Team B"} live on Cric Score: ${link}`;
+  if(navigator.share){
+    navigator.share({ title: "Cric Score — live match", text: shareText, url: link }).catch(()=>{});
+  } else if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(link).then(()=>alert("Live link copied. Send it to your spectators!")).catch(()=>{ prompt("Copy this link and send it to your spectators:", link); });
+  } else {
+    prompt("Copy this link and send it to your spectators:", link);
+  }
+}
+function stopLiveSharing(){
+  const matchId = state.liveMatchId;
+  state.liveSharing = false;
+  save(); render();
+  if(matchId){
+    ensureAnonAuth().then(()=>firebase.database().ref("matches/"+matchId).remove()).catch(()=>{});
+  }
+}
 function startInnings2(){
   pushUndo();
   const prevBattingKey = state.innings[0].battingKey;
@@ -1197,12 +1321,16 @@ function newMatch(){
   if(!confirm("Start a new match? This clears the current scorecard.")) return;
   const keepTheme = state.theme;
   const keepContentLang = state.contentLang;
+  const oldLiveMatchId = state.liveSharing ? state.liveMatchId : null;
   localStorage.removeItem(STORAGE_KEY);
   state = freshState();
   state.theme = keepTheme;
   state.contentLang = keepContentLang;
   undoStack = [];
   save(); render();
+  if(oldLiveMatchId){
+    ensureAnonAuth().then(()=>firebase.database().ref("matches/"+oldLiveMatchId).remove()).catch(()=>{});
+  }
 }
 
 function battingList(inning){
@@ -1410,6 +1538,104 @@ function scorecardHtml(inning, label, inningIndex, extrasEnabled){
       </table>
     </div>` : ""}
   `;
+}
+
+function startLiveViewer(matchId){
+  applyTheme();
+  document.documentElement.setAttribute("data-app-screen", "live");
+  renderLiveViewer(matchId, null, "loading");
+  getFirebaseApp();
+  firebase.database().ref("matches/"+matchId).on("value",
+    snap => {
+      const val = snap.val();
+      if(val && val.state) val.state = migrateState(val.state);
+      renderLiveViewer(matchId, val, val ? "ok" : "notfound");
+    },
+    () => renderLiveViewer(matchId, null, "error")
+  );
+}
+function renderLiveViewer(matchId, payload, status){
+  document.getElementById("app").innerHTML = liveViewerScreenHtml(matchId, payload, status);
+}
+function isRunningInApp(){
+  return (document.referrer && document.referrer.indexOf("android-app://")===0)
+    || (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches);
+}
+function liveViewerScreenHtml(matchId, payload, status){
+  const installBanner = isRunningInApp() ? "" : `
+    <div class="live-install-banner">
+      <span>📱 Get the Cric Score app for a better live view</span>
+      <a class="btn-ghost" href="https://play.google.com/store/apps/details?id=co.cricscore.twa" target="_blank" rel="noopener">Install</a>
+    </div>`;
+  if(status==="loading"){
+    return `<main class="live-view"><div class="eyebrow">Live match</div><h1>Connecting…</h1><p class="lede">Waiting for the scorer's updates.</p></main>${installBanner}`;
+  }
+  if(status==="notfound"){
+    return `<main class="live-view"><div class="eyebrow">Live match</div><h1>This link isn't live anymore</h1><p class="lede">The scorer has stopped sharing this match.</p></main>${installBanner}`;
+  }
+  if(status==="error"){
+    return `<main class="live-view"><div class="eyebrow">Live match</div><h1>Couldn't connect</h1><p class="lede">Check your internet connection -- this page will retry automatically.</p></main>${installBanner}`;
+  }
+
+  const savedState = state;
+  state = payload.state;
+  let html;
+  try{
+    const s = state;
+    const inningIdx = s.inningsIndex;
+    const inning = s.innings[inningIdx];
+    const updatedAgo = payload.updatedAt ? Math.max(0, Math.round((Date.now()-payload.updatedAt)/1000)) : null;
+    const liveBadge = `<div class="live-badge"><span class="live-dot"></span>LIVE${updatedAgo!=null ? ` · updated ${updatedAgo}s ago` : ""}</div>`;
+
+    if(s.screen==="result"){
+      const { text } = matchResult(s);
+      html = `
+        <main class="live-view">
+          ${liveBadge}
+          <div class="result-banner"><div class="rb-eyebrow">Full time</div><div class="rb-text">${esc(text)}</div></div>
+          <div class="card">${scorecardHtml(s.innings[0], "Innings 1", null, s.extrasEnabled)}</div>
+          <div class="card">${scorecardHtml(s.innings[1], "Innings 2", null, s.extrasEnabled)}</div>
+        </main>${installBanner}`;
+    } else if(inning){
+      const battingName = teamName(inning.battingKey), bowlingName = teamName(inning.bowlingKey);
+      const crr = inning.legalBalls>0 ? (inning.runs/(inning.legalBalls/6)).toFixed(2) : "0.00";
+      let subLine = "";
+      if(inningIdx===1 && s.innings[0]){
+        const target = s.innings[0].runs+1;
+        const needed = Math.max(target-inning.runs, 0);
+        const ballsLeft = Math.max(s.oversLimit*6-inning.legalBalls, 0);
+        const rrr = ballsLeft>0 ? (needed*6/ballsLeft).toFixed(2) : "—";
+        subLine = `<div class="sb-sub"><span>Target <b>${target}</b></span><span>Need <b>${needed}</b> off <b>${ballsLeft}</b> balls</span><span>RRR <b>${rrr}</b></span></div>`;
+      }
+      const strikerKey = inning.onStrike, nonKey = otherKey(strikerKey);
+      const striker = inning.batsmen[strikerKey], nonStriker = inning.batsmen[nonKey];
+      const crewLine = (b, onStrike) => b.name ? `<div class="crew-chip ${onStrike?'on-strike':''}"><div class="crew-label"><span class="dot ${onStrike?'':'hollow'}"></span>${onStrike?"On strike":"Non-strike"}</div><div class="crew-name">${esc(b.name)}</div><div class="crew-figs">${b.runs} (${b.balls})</div></div>` : "";
+      const bowlerFigs = inning.currentBowler && inning.bowlers[inning.currentBowler]
+        ? (() => { const f = inning.bowlers[inning.currentBowler]; const er = f.balls>0 ? (f.runs/(f.balls/6)).toFixed(2) : "0.00"; return `<div class="bowler-line">${esc(inning.currentBowler)}: ${oversText(f.balls)}-${f.maidens||0}-${f.runs}-${f.wickets} (ER ${er})</div>`; })()
+        : "";
+      html = `
+        <main class="live-view">
+          ${liveBadge}
+          <div class="scoreboard">
+            <div class="sb-batting">${esc(battingName)} batting · ${esc(bowlingName)} bowling</div>
+            <div class="sb-main">
+              <div class="sb-score">${inning.runs}/${inning.wickets}</div>
+              <div class="sb-overs">${oversText(inning.legalBalls)} / ${s.oversLimit} ov · CRR ${crr}</div>
+            </div>
+            ${subLine}
+          </div>
+          ${(striker.name || nonStriker.name) ? `<div class="crew">${crewLine(striker, true)}${crewLine(nonStriker, false)}</div>` : ""}
+          ${bowlerFigs}
+          <div class="card">${scorecardHtml(inning, s.inningsIndex===0 ? "Innings 1" : "Innings 2", null, s.extrasEnabled)}</div>
+          ${s.inningsIndex===1 && s.innings[0] ? `<div class="card">${scorecardHtml(s.innings[0], "Innings 1", null, s.extrasEnabled)}</div>` : ""}
+        </main>${installBanner}`;
+    } else {
+      html = `<main class="live-view">${liveBadge}<div class="eyebrow">Live match</div><h1>${esc(teamName("A"))} vs ${esc(teamName("B"))}</h1><p class="lede">Waiting for the innings to start…</p></main>${installBanner}`;
+    }
+  } finally {
+    state = savedState;
+  }
+  return html;
 }
 
 let lastFireworksMatchId = null;
@@ -2192,6 +2418,7 @@ function scoringScreen(){
           ? `<button class="innings-pill" onclick="editOvers()" title="Change overs">${state.oversLimit} OV · INNINGS 1 OF 2 ✎</button>`
           : `<div class="innings-pill locked" title="Overs are locked once the 2nd innings starts">${state.oversLimit} OV · INNINGS 2 OF 2 🔒</div>`}
         <button class="icon-btn" onclick="shareTransferLink()" title="Continue on another device" aria-label="Continue on another device">🔗</button>
+        <button class="icon-btn ${state.liveSharing ? 'live-active' : ''}" onclick="shareLiveScore()" title="${state.liveSharing ? 'Sharing live -- tap to stop' : 'Share live score with spectators'}" aria-label="${state.liveSharing ? 'Stop live sharing' : 'Share live score'}">${state.liveSharing ? '🔴' : '📡'}</button>
       </div>
     </div>
     <main>
@@ -2220,6 +2447,7 @@ function breakScreen(){
       <button class="btn btn-primary" onclick="startInnings2()">Start innings 2</button>
       <button class="btn-ghost" style="width:100%; padding:11px 12px;" onclick="editOvers()">✎ Change overs (currently ${state.oversLimit})</button>
       <button class="btn-ghost" style="width:100%; padding:11px 12px;" onclick="shareTransferLink()">🔗 Continue on another device</button>
+      <button class="btn-ghost" style="width:100%; padding:11px 12px;" onclick="shareLiveScore()">${state.liveSharing ? '🔴 Sharing live -- tap to stop' : '📡 Share live score'}</button>
       <button class="btn-ghost" style="width:100%; padding:11px 12px;" onclick="goHome()">🏠 Home</button>
     </main>
     <footer>You'll enter the new openers and the opening bowler next.</footer>
@@ -2286,6 +2514,7 @@ function resultScreen(){
       ${feedbackCard}
       <div class="no-print" style="display:flex; flex-direction:column; gap:8px;">
         <button class="btn btn-export" onclick="exportScorecard()">⬇ Export PDF</button>
+        <button class="btn-ghost" style="width:100%; padding:11px 12px;" onclick="shareLiveScore()">${state.liveSharing ? '🔴 Sharing live -- tap to stop' : '📡 Share live score'}</button>
         <button class="btn btn-primary" onclick="newMatch()">New match</button>
         <button class="btn-ghost" style="width:100%; padding:11px 12px;" onclick="openHistory()">📜 View all past matches</button>
       </div>
@@ -2367,7 +2596,7 @@ function playBootAnimation(cb){
   if(el) el.addEventListener("click", finish, { once: true });
   setTimeout(finish, 1500);
 }
-playBootAnimation(render);
+playBootAnimation(liveViewMatchId ? (() => startLiveViewer(liveViewMatchId)) : render);
 
 if("serviceWorker" in navigator){
   window.addEventListener("load", () => {
