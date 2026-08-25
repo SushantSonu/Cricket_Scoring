@@ -306,6 +306,7 @@
   }
   .boundary-popup.four .boundary-num, .boundary-popup.four .boundary-label{ color: var(--turf-strong); }
   .boundary-popup.six .boundary-num, .boundary-popup.six .boundary-label{ color: var(--bail); }
+  .boundary-popup.wicket .boundary-num, .boundary-popup.wicket .boundary-label{ color: var(--ball); }
   @media (prefers-reduced-motion: reduce){
     .boundary-popup{ animation: none; opacity: 1; }
   }
@@ -1011,6 +1012,13 @@ function showBoundaryPopup(n){
   document.body.appendChild(el);
   setTimeout(()=>{ el.remove(); }, 1200);
 }
+function showWicketPopup(){
+  const el = document.createElement("div");
+  el.className = "boundary-popup wicket";
+  el.innerHTML = `<div class="boundary-num">W</div><div class="boundary-label">OUT!</div>`;
+  document.body.appendChild(el);
+  setTimeout(()=>{ el.remove(); }, 1200);
+}
 function addExtra(type){
   if(hasPending()) return;
   const raw = prompt("Total runs on this wide? (usually 1)", "1");
@@ -1096,6 +1104,7 @@ function addWicket(dismissalType, fielder){
   afterLegalBall(inning);
   inning.batsmen[key] = emptyBatsman();
   finishAction();
+  showWicketPopup();
 }
 function openWicketMenu(){
   if(hasPending()) return;
@@ -1145,6 +1154,7 @@ function addRunOut(dismissedKey, fielder){
   afterLegalBall(inning);
   inning.batsmen[dismissedKey] = emptyBatsman();
   finishAction();
+  showWicketPopup();
 }
 function openRetireMenu(){
   if(hasPending()) return;
@@ -1551,6 +1561,21 @@ function scorecardHtml(inning, label, inningIndex, extrasEnabled){
   `;
 }
 
+function detectLiveEvents(prev, next){
+  const events = { boundary: null, wicket: false };
+  if(!prev || !next) return events;
+  if(prev.inningsIndex !== next.inningsIndex) return events;
+  const prevInning = prev.innings[prev.inningsIndex], nextInning = next.innings[next.inningsIndex];
+  if(!prevInning || !nextInning) return events;
+  const runDelta = nextInning.runs - prevInning.runs;
+  const ballDelta = nextInning.legalBalls - prevInning.legalBalls;
+  const wicketDelta = nextInning.wickets - prevInning.wickets;
+  if(ballDelta===1 && wicketDelta===0 && (runDelta===4 || runDelta===6)) events.boundary = runDelta;
+  if(wicketDelta===1) events.wicket = true;
+  return events;
+}
+let liveViewerPrevState = null;
+let lastLiveFireworksMatchId = null;
 function startLiveViewer(matchId){
   applyTheme();
   document.documentElement.setAttribute("data-app-screen", "live");
@@ -1560,7 +1585,19 @@ function startLiveViewer(matchId){
     snap => {
       const val = snap.val();
       if(val && val.state) val.state = migrateState(val.state);
+      if(val && val.state){
+        const events = detectLiveEvents(liveViewerPrevState, val.state);
+        if(events.boundary) showBoundaryPopup(events.boundary);
+        if(events.wicket) showWicketPopup();
+        liveViewerPrevState = val.state;
+      }
       renderLiveViewer(matchId, val, val ? "ok" : "notfound");
+      if(val && val.state && val.state.screen==="result" && matchId!==lastLiveFireworksMatchId){
+        lastLiveFireworksMatchId = matchId;
+        if(!window.matchMedia("(prefers-reduced-motion: reduce)").matches){
+          requestAnimationFrame(playFireworks);
+        }
+      }
     },
     () => renderLiveViewer(matchId, null, "error")
   );
@@ -1600,10 +1637,25 @@ function liveViewerScreenHtml(matchId, payload, status){
 
     if(s.screen==="result"){
       const { text } = matchResult(s);
+      const players = allPlayers(s).sort((a,b)=>momScore(b)-momScore(a));
+      const momPlayer = players.find(p=>p.name===s.manOfMatch) || players[0];
+      const momCard = momPlayer ? `
+        <div class="card mom-card">
+          <div class="mom-eyebrow">🏅 Man of the match</div>
+          <div class="mom-body">
+            <div>
+              <div class="mom-name">${esc(momPlayer.name)}</div>
+              <div class="mom-figs">${esc(momSummary(momPlayer))} · ${esc(teamName(momPlayer.teamKey, s))}</div>
+            </div>
+          </div>
+        </div>
+      ` : "";
       html = `
+        <canvas id="fireworksCanvas" class="fireworks-canvas no-print"></canvas>
         <main class="live-view">
           ${liveBadge}
           <div class="result-banner"><div class="rb-eyebrow">Full time</div><div class="rb-text">${esc(text)}</div></div>
+          ${momCard}
           <div class="card">${scorecardHtml(s.innings[0], "Innings 1", null, s.extrasEnabled)}</div>
           <div class="card">${scorecardHtml(s.innings[1], "Innings 2", null, s.extrasEnabled)}</div>
         </main>${installBanner}`;
