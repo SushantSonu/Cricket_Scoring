@@ -307,6 +307,29 @@
   .boundary-popup.four .boundary-num, .boundary-popup.four .boundary-label{ color: var(--turf-strong); }
   .boundary-popup.six .boundary-num, .boundary-popup.six .boundary-label{ color: var(--bail); }
   .boundary-popup.wicket .boundary-num, .boundary-popup.wicket .boundary-label{ color: var(--ball); }
+  .toss-coin-wrap{ display:flex; flex-direction:column; align-items:center; gap:10px; margin: 6px 0 22px; }
+  .toss-coin{
+    width: 92px; height: 92px; position: relative; perspective: 600px;
+    cursor: pointer; appearance: none; border: none; background: transparent; padding: 0;
+  }
+  .toss-coin-inner{
+    width:100%; height:100%; position:relative; transform-style: preserve-3d;
+    transition: transform 1s cubic-bezier(.2,.8,.2,1);
+  }
+  .coin-face{
+    position:absolute; inset:0; border-radius:50%;
+    display:flex; align-items:center; justify-content:center;
+    font-weight:900; font-size:28px; letter-spacing:0.04em; color:#fff;
+    backface-visibility:hidden; -webkit-backface-visibility:hidden;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.3), inset 0 0 0 3px rgba(255,255,255,0.35);
+  }
+  .coin-heads{ background: linear-gradient(145deg, var(--bail), #a9701c); }
+  .coin-tails{ background: linear-gradient(145deg, var(--turf), var(--turf-strong)); transform: rotateY(180deg); }
+  .toss-coin-hint{ font-size:12.5px; color:var(--ink-soft); min-height:16px; }
+  .toss-coin-result{ font-weight:800; font-size:16px; min-height:20px; }
+  @media (prefers-reduced-motion: reduce){
+    .toss-coin-inner{ transition: none; }
+  }
   @media (prefers-reduced-motion: reduce){
     .boundary-popup{ animation: none; opacity: 1; }
   }
@@ -1781,6 +1804,62 @@ function getFireworksAudioCtx(){
   }
   return fireworksAudioCtx;
 }
+function playCoinFlipSound(){
+  const ac = getFireworksAudioCtx();
+  if(!ac) return;
+  const now = ac.currentTime;
+  const duration = 1.0;
+  const clickCount = 10;
+  for(let i=0; i<clickCount; i++){
+    // clicks bunch up early and space out later, mimicking a spinning coin slowing down
+    const t = now + duration * Math.pow(i/clickCount, 1.6);
+    const bufferSize = Math.max(1, Math.floor(ac.sampleRate * 0.012));
+    const buffer = ac.createBuffer(1, bufferSize, ac.sampleRate);
+    const data = buffer.getChannelData(0);
+    for(let j=0; j<bufferSize; j++){ data[j] = (Math.random()*2-1) * (1 - j/bufferSize); }
+    const noise = ac.createBufferSource();
+    noise.buffer = buffer;
+    const filter = ac.createBiquadFilter();
+    filter.type = "highpass";
+    filter.frequency.value = 3000;
+    const g = ac.createGain();
+    g.gain.setValueAtTime(0.15, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t+0.02);
+    noise.connect(filter).connect(g).connect(ac.destination);
+    noise.start(t);
+  }
+  const landT = now + duration;
+  const osc = ac.createOscillator();
+  osc.type = "triangle";
+  osc.frequency.setValueAtTime(1200, landT);
+  osc.frequency.exponentialRampToValueAtTime(500, landT+0.15);
+  const gain = ac.createGain();
+  gain.gain.setValueAtTime(0.25, landT);
+  gain.gain.exponentialRampToValueAtTime(0.001, landT+0.2);
+  osc.connect(gain).connect(ac.destination);
+  osc.start(landT);
+  osc.stop(landT+0.2);
+}
+let tossCoinRotation = 0;
+let tossCoinShowingHeads = true;
+function flipCoin(){
+  const coin = document.getElementById("tossCoinInner");
+  if(!coin || coin.dataset.flipping==="1") return;
+  const resultEl = document.getElementById("tossCoinResult");
+  coin.dataset.flipping = "1";
+  if(resultEl) resultEl.textContent = "Flipping…";
+  const isHeads = Math.random() < 0.5;
+  playCoinFlipSound();
+  const spins = 5 + Math.floor(Math.random()*3);
+  const faceChange = (isHeads !== tossCoinShowingHeads) ? 180 : 0;
+  tossCoinRotation += spins*360 + faceChange;
+  tossCoinShowingHeads = isHeads;
+  coin.style.transform = `rotateY(${tossCoinRotation}deg)`;
+  setTimeout(()=>{
+    coin.dataset.flipping = "0";
+    if(resultEl) resultEl.textContent = isHeads ? "Heads!" : "Tails!";
+  }, 1000);
+}
 function playCrackleSound(){
   const ac = getFireworksAudioCtx();
   if(!ac) return;
@@ -2353,11 +2432,23 @@ function setupScreen(){
 }
 
 function tossScreen(){
+  tossCoinRotation = 0;
+  tossCoinShowingHeads = true;
   return `
     <main>
       <div class="eyebrow">Step 2</div>
       <h1>Who's batting first?</h1>
       <p class="lede">${esc(state.teamAName)} vs ${esc(state.teamBName)} · ${state.oversLimit} over${state.oversLimit===1?"":"s"} a side.</p>
+      <div class="toss-coin-wrap">
+        <button class="toss-coin" id="tossCoin" onclick="flipCoin()" aria-label="Flip a coin">
+          <div class="toss-coin-inner" id="tossCoinInner">
+            <div class="coin-face coin-heads">H</div>
+            <div class="coin-face coin-tails">T</div>
+          </div>
+        </button>
+        <div class="toss-coin-result" id="tossCoinResult"></div>
+        <div class="toss-coin-hint">Tap the coin to flip for the toss</div>
+      </div>
       <button class="btn-choice" onclick="chooseBattingFirst('A')"><span>${esc(state.teamAName)}</span><span class="arrow">bats first →</span></button>
       <button class="btn-choice" onclick="chooseBattingFirst('B')"><span>${esc(state.teamBName)}</span><span class="arrow">bats first →</span></button>
       <button class="btn-ghost" style="width:100%; padding:11px 12px;" onclick="goHome()">🏠 Home</button>
