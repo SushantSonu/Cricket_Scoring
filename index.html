@@ -1167,6 +1167,9 @@ function confirmDismissal(type){
   if(type==="caught"){
     const name = prompt("Who took the catch? (leave blank if the bowler caught it)", "");
     fielder = name && name.trim() ? name.trim() : null;
+  } else if(type==="stumped"){
+    const name = prompt("Who made the stumping? (wicketkeeper's name)", "");
+    fielder = name && name.trim() ? name.trim() : null;
   }
   addWicket(type, fielder);
 }
@@ -1366,6 +1369,17 @@ function shareLiveScore(){
     prompt("Copy this link and send it to your spectators:", link);
   }
 }
+function shareSpectatorLink(){
+  const link = location.href;
+  const shareText = `Follow this cricket match live on Cric Score: ${link}`;
+  if(navigator.share){
+    navigator.share({ title: "Cric Score — live match", text: shareText, url: link }).catch(()=>{});
+  } else if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(link).then(()=>alert("Link copied. Send it to your friends!")).catch(()=>{ prompt("Copy this link and send it to your friends:", link); });
+  } else {
+    prompt("Copy this link and send it to your friends:", link);
+  }
+}
 function stopLiveSharing(){
   const matchId = state.liveMatchId;
   state.liveSharing = false;
@@ -1527,7 +1541,7 @@ function dismissalText(p){
     case "bowled": return `b ${bowler}`;
     case "caught": return fielder ? `c ${fielder} b ${bowler}` : `c &amp; b ${bowler}`;
     case "lbw": return `lbw b ${bowler}`;
-    case "stumped": return `st b ${bowler}`;
+    case "stumped": return fielder ? `st ${fielder} b ${bowler}` : `st b ${bowler}`;
     case "hitwicket": return `hit wicket b ${bowler}`;
     case "runout": return fielder ? `run out (${fielder})` : "run out";
     default: return `out &middot; ${bowler}`;
@@ -1735,6 +1749,19 @@ function liveViewerScreenHtml(matchId, payload, status){
     const inning = s.innings[inningIdx];
     const updatedAgo = payload.updatedAt ? Math.max(0, Math.round((Date.now()-payload.updatedAt)/1000)) : null;
     const liveBadge = `<div class="live-badge"><span class="live-dot"></span>LIVE${updatedAgo!=null ? ` · updated ${updatedAgo}s ago` : ""}</div>`;
+    const printHeader = `
+      <div class="print-only sc-print-header">
+        <div class="sc-print-title">${esc(s.teamAName)} vs ${esc(s.teamBName)}</div>
+        <div class="sc-print-meta">${s.oversLimit}-over match &middot; ${esc(new Date().toLocaleDateString())}</div>
+        <div class="sc-print-brand">Cric Score</div>
+      </div>
+    `;
+    const spectatorActions = `
+      <div class="no-print" style="display:flex; flex-direction:column; gap:8px;">
+        <button class="btn-ghost" style="width:100%; padding:11px 12px;" onclick="shareSpectatorLink()">📤 Share this link</button>
+        <button class="btn btn-export" onclick="exportScorecard()">⬇ Export PDF</button>
+      </div>
+    `;
 
     if(s.screen==="result"){
       const { text } = matchResult(s);
@@ -1764,6 +1791,7 @@ function liveViewerScreenHtml(matchId, payload, status){
       html = `
         <canvas id="fireworksCanvas" class="fireworks-canvas no-print"></canvas>
         <main class="live-view">
+          ${printHeader}
           ${liveBadge}
           <div class="result-banner"><div class="rb-eyebrow">Full time</div><div class="rb-text">${esc(text)}</div></div>
           ${momCard}
@@ -1777,6 +1805,7 @@ function liveViewerScreenHtml(matchId, payload, status){
             <div class="card">${overSummaryHtml(s.innings[0], "Innings 1")}</div>
             <div class="card">${overSummaryHtml(s.innings[1], "Innings 2")}</div>
           </div>
+          ${spectatorActions}
         </main>${installBanner}`;
     } else if(inning){
       const battingName = teamName(inning.battingKey), bowlingName = teamName(inning.bowlingKey);
@@ -1806,6 +1835,7 @@ function liveViewerScreenHtml(matchId, payload, status){
         : "";
       html = `
         <main class="live-view">
+          ${printHeader}
           ${liveBadge}
           <div class="scoreboard">
             <div class="sb-batting">${esc(battingName)} batting · ${esc(bowlingName)} bowling</div>
@@ -1827,6 +1857,7 @@ function liveViewerScreenHtml(matchId, payload, status){
             <div class="card">${overSummaryHtml(inning, s.inningsIndex===0 ? "Innings 1" : "Innings 2")}</div>
             ${s.inningsIndex===1 && s.innings[0] ? `<div class="card">${overSummaryHtml(s.innings[0], "Innings 1")}</div>` : ""}
           </div>
+          ${spectatorActions}
         </main>${installBanner}`;
     } else {
       html = `<main class="live-view">${liveBadge}<div class="eyebrow">Live match</div><h1>${esc(teamName("A"))} vs ${esc(teamName("B"))}</h1><p class="lede">Waiting for the innings to start…</p></main>${installBanner}`;
@@ -2151,7 +2182,7 @@ const INFO_CONTENT = {
       <ol>
         <li>Enter the two opening batsmen and the opening bowler — this is the only time you name players, and it happens right when play starts, not before.</li>
         <li>Tap a run button (0–6) for each legal delivery, or tag any extra you turned on. Wide, bye, and leg bye ask how many runs in total (usually 1) so you can record a boundary wide or a couple of run byes; no ball asks how many runs came off the bat, on top of the automatic 1-run penalty.</li>
-        <li>Tap <b>Wicket</b> to say how the batsman got out — bowled, caught (you can name the fielder), LBW, stumped, hit wicket, or run out (either batsman; naming the fielder is optional).</li>
+        <li>Tap <b>Wicket</b> to say how the batsman got out — bowled, caught (you can name the fielder), LBW, stumped (you can name the wicketkeeper), hit wicket, or run out (either batsman; naming the fielder is optional).</li>
         <li>If someone's hurt and has to leave the field without being out, use <b>Retired hurt</b> — it doesn't count as a wicket, and a new batsman comes in the same way a wicket would ask for one.</li>
         <li>Tap either batsman's box, or the ⇆ button between them, to manually correct who's on strike — you'll be asked to confirm first.</li>
         <li>The current pair's partnership (runs and balls added together since they came to the crease) shows just below them, and every partnership of the innings — including the final, unbroken one — is listed on the scorecard too.</li>
@@ -2192,7 +2223,7 @@ const INFO_CONTENT = {
       <ol>
         <li>दो ओपनिंग बैट्समैन और बॉलर के नाम डालें — यह इकलौता समय है जब आपको खिलाड़ियों के नाम डालने होते हैं, और यह खेल शुरू होने पर ही होता है, पहले से नहीं।</li>
         <li>हर लीगल बॉल के लिए रन बटन (0–6) दबाएं, या ऑन किया गया कोई भी एक्स्ट्रा टैग करें। वाइड, बाई और लेग बाई में कुल रन (आमतौर पर 1) पूछे जाते हैं, ताकि बाउंड्री वाइड या दो-तीन रन बाई भी दर्ज हो सकें; नो-बॉल में बैट से बने रन पूछे जाते हैं, जो 1 रन की पेनल्टी के ऊपर जुड़ते हैं।</li>
-        <li><b>Wicket</b> दबाकर तय करें कि बैट्समैन कैसे आउट हुआ — बोल्ड, कैच आउट (फील्डर का नाम भी डाल सकते हैं), एलबीडब्ल्यू, स्टंप्ड, हिट विकेट, या रन आउट (कोई भी बैट्समैन; फील्डर का नाम डालना ज़रूरी नहीं)।</li>
+        <li><b>Wicket</b> दबाकर तय करें कि बैट्समैन कैसे आउट हुआ — बोल्ड, कैच आउट (फील्डर का नाम भी डाल सकते हैं), एलबीडब्ल्यू, स्टंप्ड (विकेटकीपर का नाम भी डाल सकते हैं), हिट विकेट, या रन आउट (कोई भी बैट्समैन; फील्डर का नाम डालना ज़रूरी नहीं)।</li>
         <li>अगर कोई बैट्समैन चोटिल होकर आउट हुए बिना मैदान छोड़ता है, तो <b>Retired hurt</b> इस्तेमाल करें — यह विकेट नहीं गिनता, और नया बैट्समैन उसी तरह आता है जैसे विकेट गिरने पर आता है।</li>
         <li>किसी भी बैट्समैन के बॉक्स पर, या बीच वाले ⇆ बटन पर टैप करके स्ट्राइक मैन्युअली बदलें — पहले पुष्टि के लिए पूछा जाएगा।</li>
         <li>मौजूदा जोड़ी की पार्टनरशिप (क्रीज़ पर आने के बाद से मिलकर बनाए गए रन और बॉल) उनके नीचे दिखाई जाती है, और इनिंग की हर पार्टनरशिप — आखिरी, बिना टूटी हुई पार्टनरशिप सहित — स्कोरकार्ड पर भी लिस्ट होती है।</li>
