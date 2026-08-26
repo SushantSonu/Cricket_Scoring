@@ -701,6 +701,7 @@ function freshInning(battingKey, bowlingKey){
     currentBowler:null,
     bowlers:{},
     thisOverBalls:[],
+    overHistory:[],
     fallOfWickets:[],
     retired:[],
     lastAvailableFlagged:false, soloMode:false, soloKey:null, soloStartWickets:0,
@@ -732,6 +733,7 @@ function migrateState(s){
     if(!inning.retired) inning.retired = [];
     if(!inning.fallOfWickets) inning.fallOfWickets = [];
     if(!inning.thisOverBalls) inning.thisOverBalls = [];
+    if(!inning.overHistory) inning.overHistory = [];
     if(typeof inning.currentOverRuns !== "number") inning.currentOverRuns = 0;
     if(typeof inning.lastAvailableFlagged !== "boolean") inning.lastAvailableFlagged = false;
     if(typeof inning.soloMode !== "boolean") inning.soloMode = false;
@@ -859,6 +861,16 @@ function recordPartnershipEnd(inning){
   inning.partnershipStartBalls = inning.legalBalls;
 }
 
+function flushCurrentOverToHistory(inning){
+  if(!inning.thisOverBalls.length) return;
+  inning.overHistory.push({
+    overNumber: inning.overHistory.length + 1,
+    bowler: inning.currentBowler,
+    runs: inning.currentOverRuns||0,
+    balls: [...inning.thisOverBalls]
+  });
+  inning.thisOverBalls = [];
+}
 function checkInningsEnd(inning){
   let ended=false, reason=null;
   if(inning.legalBalls >= state.oversLimit*6){ ended=true; reason="overs"; }
@@ -868,7 +880,10 @@ function checkInningsEnd(inning){
     const target = state.innings[0].runs+1;
     if(inning.runs >= target){ ended=true; reason="target"; }
   }
-  if(ended){ inning.ended=true; inning.endReason=reason; }
+  if(ended){
+    inning.ended=true; inning.endReason=reason;
+    flushCurrentOverToHistory(inning); // catches a wicket/target/overs-edit ending the innings mid-over
+  }
 }
 function afterLegalBall(inning){
   const overJustCompleted = inning.legalBalls % 6 === 0;
@@ -877,9 +892,9 @@ function afterLegalBall(inning){
     if(bowlerName && inning.bowlers[bowlerName] && (inning.currentOverRuns||0) === 0){
       inning.bowlers[bowlerName].maidens = (inning.bowlers[bowlerName].maidens||0) + 1;
     }
+    flushCurrentOverToHistory(inning);
     inning.currentOverRuns = 0;
     toggleStrike(inning);
-    inning.thisOverBalls = [];
   }
   checkInningsEnd(inning);
   if(overJustCompleted && !inning.ended){
@@ -1261,6 +1276,7 @@ function endInningsManual(){
   if(!confirm("End this innings now?")) return;
   pushUndo();
   const inning = currentInning();
+  flushCurrentOverToHistory(inning);
   inning.ended = true;
   inning.endReason = "manual";
   finishAction();
@@ -1544,6 +1560,16 @@ function scorecardHtml(inning, label, inningIndex, extrasEnabled){
   const oversDecimal = inning.legalBalls/6;
   const runRate = oversDecimal>0 ? (inning.runs/oversDecimal).toFixed(2) : "0.00";
   const fowRows = inning.fallOfWickets.map(f=>`<tr><td>${esc(f.name)}</td><td class="num">${f.atScore}/${f.wicketNo}</td><td class="num">${f.atOver||"—"}</td></tr>`).join("");
+  const overHistoryRows = (inning.overHistory||[]).map(o=>{
+    const chips = o.balls.map(b=>{
+      let cls = "chip";
+      if(b==="4"||b==="6") cls += " boundary";
+      else if(b==="W") cls += " wicket";
+      else if(b.startsWith("wd")||b.startsWith("nb")||b.startsWith("b")||b.startsWith("lb")) cls += " extra";
+      return `<span class="${cls}">${b}</span>`;
+    }).join("");
+    return `<tr><td>${o.overNumber}${o.bowler ? " · "+esc(o.bowler) : ""}</td><td class="num">${o.runs}</td><td><div class="ball-chips">${chips}</div></td></tr>`;
+  }).join("");
   const partnerships = inning.partnershipHistory.map(p=>({ ...p, unbroken:false }));
   if(inning.batsmen.A.name && inning.batsmen.B.name){
     const cur = currentPartnership(inning);
@@ -1581,6 +1607,14 @@ function scorecardHtml(inning, label, inningIndex, extrasEnabled){
         <caption>${esc(label)} — Partnerships${partnerships.some(p=>p.unbroken) ? " (* unbroken)" : ""}</caption>
         <tr><th>Pair</th><th class="num">Runs</th><th class="num">Balls</th></tr>
         ${partnershipRows}
+      </table>
+    </div>` : ""}
+    ${(inning.overHistory||[]).length ? `
+    <div class="scorecard-wrap" style="margin-top:16px">
+      <table class="scorecard">
+        <caption>${esc(label)} — Over-by-over</caption>
+        <tr><th>Over</th><th class="num">Runs</th><th>Balls</th></tr>
+        ${overHistoryRows}
       </table>
     </div>` : ""}
   `;
