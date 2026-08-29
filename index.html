@@ -495,6 +495,12 @@
   .chip.boundary{ background:var(--turf-tint); color:var(--turf-strong); border-color:transparent; }
   .chip.wicket{ background:var(--ball-tint); color:var(--ball); border-color:transparent; }
   .chip.extra{ background:var(--bail-tint); color:var(--bail); border-color:transparent; }
+  .name-suggestions{ display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+  .suggestion-chip{
+    appearance:none; cursor:pointer; border:1px solid var(--card-line); background:var(--card);
+    color:var(--ink); border-radius:14px; padding:5px 12px; font-size:12.5px; font-weight:600;
+  }
+  .suggestion-chip:hover{ border-color:var(--turf); color:var(--turf); }
 
   .entry-card{ border-color:var(--turf); }
   .entry-title{ font-weight:800; font-size:15px; margin-bottom:2px; }
@@ -990,6 +996,10 @@ function neededSlots(inning){
     };
   }
   return { needA: !inning.batsmen.A.name, needB: !inning.batsmen.B.name, needBowler: !inning.currentBowler };
+}
+function fillBowlerName(name){
+  const el = document.getElementById("entryBowler");
+  if(el) el.value = name;
 }
 function confirmEntries(){
   const inning = currentInning();
@@ -2597,7 +2607,11 @@ function entryFormHtml(inning){
       <div class="entry-hint">${hint}</div>
       ${needA ? `<div class="field"><label for="entryA">Batsman — on strike</label><input id="entryA" type="text" maxlength="24" placeholder="Name"></div>` : ""}
       ${needB ? `<div class="field"><label for="entryB">Batsman — non-strike</label><input id="entryB" type="text" maxlength="24" placeholder="Name"></div>` : ""}
-      ${needBowler ? `<div class="field"><label for="entryBowler">Bowler</label><input id="entryBowler" type="text" maxlength="24" placeholder="Name" list="bowlerSuggestions" autocomplete="off"><datalist id="bowlerSuggestions">${Object.keys(inning.bowlers).map(n=>`<option value="${esc(n)}"></option>`).join("")}</datalist></div>` : ""}
+      ${needBowler ? `<div class="field">
+        <label for="entryBowler">Bowler</label>
+        <input id="entryBowler" type="text" maxlength="24" placeholder="Name" autocomplete="off">
+        ${Object.keys(inning.bowlers).length ? `<div class="name-suggestions">${Object.keys(inning.bowlers).map(n=>`<button type="button" class="suggestion-chip" onclick='fillBowlerName(${esc(JSON.stringify(n))})'>${esc(n)}</button>`).join("")}</div>` : ""}
+      </div>` : ""}
       ${offerLastPlayerCheckbox ? `
         <div class="field" style="flex-direction:row; align-items:center; gap:8px;">
           <input type="checkbox" id="lastPlayerCheckbox" style="width:18px; height:18px; flex-shrink:0;">
