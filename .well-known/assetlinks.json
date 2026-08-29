@@ -3,6 +3,9 @@
   "target": {
     "namespace": "android_app",
     "package_name": "co.cricscore.twa",
-    "sha256_cert_fingerprints": ["FF:22:D1:53:DE:79:F0:5D:52:E0:3B:E9:A7:46:C8:1B:2E:2A:1E:DA:D7:66:26:D5:09:8E:DF:6E:2B:29:17:0E"]
+    "sha256_cert_fingerprints": [
+      "FF:22:D1:53:DE:79:F0:5D:52:E0:3B:E9:A7:46:C8:1B:2E:2A:1E:DA:D7:66:26:D5:09:8E:DF:6E:2B:29:17:0E",
+      "0F:1E:10:AE:C9:9F:72:2F:CA:60:82:68:D3:05:BD:17:FE:49:37:F4:3D:5F:69:28:B7:C3:D0:0C:A8:BA:0A:6E"
+    ]
   }
 }]
