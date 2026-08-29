@@ -2597,7 +2597,7 @@ function entryFormHtml(inning){
       <div class="entry-hint">${hint}</div>
       ${needA ? `<div class="field"><label for="entryA">Batsman — on strike</label><input id="entryA" type="text" maxlength="24" placeholder="Name"></div>` : ""}
       ${needB ? `<div class="field"><label for="entryB">Batsman — non-strike</label><input id="entryB" type="text" maxlength="24" placeholder="Name"></div>` : ""}
-      ${needBowler ? `<div class="field"><label for="entryBowler">Bowler</label><input id="entryBowler" type="text" maxlength="24" placeholder="Name"></div>` : ""}
+      ${needBowler ? `<div class="field"><label for="entryBowler">Bowler</label><input id="entryBowler" type="text" maxlength="24" placeholder="Name" list="bowlerSuggestions" autocomplete="off"><datalist id="bowlerSuggestions">${Object.keys(inning.bowlers).map(n=>`<option value="${esc(n)}"></option>`).join("")}</datalist></div>` : ""}
       ${offerLastPlayerCheckbox ? `
         <div class="field" style="flex-direction:row; align-items:center; gap:8px;">
           <input type="checkbox" id="lastPlayerCheckbox" style="width:18px; height:18px; flex-shrink:0;">
@@ -2606,6 +2606,7 @@ function entryFormHtml(inning){
       ` : ""}
       ${state.formError ? `<div class="error-text">${esc(state.formError)}</div>` : ""}
       <button class="btn btn-primary" onclick="confirmEntries()">${isInningsStart ? "Start innings" : "Confirm"}</button>
+      ${undoStack.length ? `<button class="btn-ghost" style="width:100%; padding:11px 12px; margin-top:8px;" onclick="undo()">↺ Undo</button>` : ""}
     </div>
   `;
 }
